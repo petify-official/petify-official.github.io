@@ -82,8 +82,9 @@ function AdminLogin({ adminBrand, onSignedIn }) {
   );
 }
 
-function ProductEditor({ product, sections, onCancel, onSave }) {
+function ProductEditor({ product, products, sections, onCancel, onSave }) {
   const [form, setForm] = useState(product);
+  const [productIdCustomized, setProductIdCustomized] = useState(false);
   const [imageItems, setImageItems] = useState(() => (product.images ?? []).map((url, index) => ({ id: `existing-${index}`, url })));
   const previewUrls = useRef(new Set());
   const [busy, setBusy] = useState(false);
@@ -105,7 +106,7 @@ function ProductEditor({ product, sections, onCancel, onSave }) {
     setForm((current) => ({
       ...current,
       title,
-      id: current.id || slugify(title),
+      id: isEditing || productIdCustomized ? current.id : slugify(title),
       defaultWhatsappMsg: current.defaultWhatsappMsg || `Hi Petify, I want to order ${title}`,
     }));
   }
@@ -129,8 +130,14 @@ function ProductEditor({ product, sections, onCancel, onSave }) {
     setUploadProgress({ message: "Preparing product save...", percent: 3 });
 
     try {
-      const id = form.id || slugify(form.title);
+      const id = form.id.trim();
       if (!id) throw new Error("Add a product title to create its product ID.");
+      if (!isEditing && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+        throw new Error("Product IDs must use lowercase letters, numbers, and single hyphens between words.");
+      }
+      if (!isEditing && products.some((existingProduct) => existingProduct.id === id)) {
+        throw new Error(`The product ID "${id}" is already in use. Choose a different ID.`);
+      }
       const queuedFiles = imageItems.filter((item) => item.file);
       const uploaded = queuedFiles.length
         ? await uploadProductImages(id, queuedFiles.map((item) => item.file), ({ completed, total, fileName }) => {
@@ -186,7 +193,18 @@ function ProductEditor({ product, sections, onCancel, onSave }) {
         </label>
         <label>Badge<input value={form.badge} onChange={(event) => update("badge", event.target.value)} required /></label>
         <label className="admin-span-two">Product name<input value={form.title} onChange={(event) => updateTitle(event.target.value)} required /></label>
-        {isEditing && <label>Product ID<input value={form.id} readOnly /></label>}
+        {isEditing ? (
+          <label>Product ID<input value={form.id} readOnly /><span className="admin-field-hint">This ID is fixed after creation because it identifies the saved product and its image folder.</span></label>
+        ) : (
+          <label className="admin-span-two">Product ID<input value={form.id} onChange={(event) => {
+            setProductIdCustomized(true);
+            update("id", event.target.value);
+          }} required aria-describedby="product-id-hint" />
+            <span className="admin-field-hint" id="product-id-hint">
+              Suggested from the product name: <strong>{slugify(form.title) || "Enter a product name"}</strong>. This unique ID identifies the product and its image folder. You can change it before saving; use lowercase letters, numbers, and hyphens.
+            </span>
+          </label>
+        )}
         <label>Display order<input type="number" min="0" step="1" value={form.displayOrder} onChange={(event) => update("displayOrder", event.target.value)} /></label>
         <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} required /></label>
         {form.type === "single" && <label className="admin-span-two">Product details, one per line<textarea rows="4" value={form.specsText} onChange={(event) => update("specsText", event.target.value)} placeholder={"Material: Cotton\nSize: Medium"} /></label>}
@@ -421,6 +439,7 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
             <ProductEditor
               key={editorProduct.id || "new"}
               product={editorProduct}
+              products={products}
               sections={sections}
               onCancel={() => setEditorProduct(null)}
               onSave={async ({ closeEditor = true } = {}) => { await refreshProducts(); if (closeEditor) setEditorProduct(null); }}
