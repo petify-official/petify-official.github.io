@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import SiteSettingsManager from "./features/admin/SiteSettingsManager.jsx";
 import { supabase } from "./lib/supabase.js";
 import { DEFAULT_ADMIN_BRAND, normalizeAdminBrand } from "./config/siteAppearance.js";
@@ -49,18 +49,6 @@ function asEditableProduct(product) {
   };
 }
 
-function readAdminWorkspace(userId) {
-  try {
-    const savedWorkspace = sessionStorage.getItem(`petify-admin-workspace:${userId}`);
-    if (!savedWorkspace) return {};
-    const workspace = JSON.parse(savedWorkspace);
-    return workspace && typeof workspace === "object" && !Array.isArray(workspace) ? workspace : {};
-  } catch (error) {
-    console.error("The admin workspace could not be restored.", error);
-    return {};
-  }
-}
-
 function AdminLogin({ adminBrand, onSignedIn }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -94,34 +82,21 @@ function AdminLogin({ adminBrand, onSignedIn }) {
   );
 }
 
-function ProductEditor({ product, draft, products, sections, onCancel, onDraftChange, onSave }) {
-  const [form, setForm] = useState(() => draft?.form ?? product);
-  const [productIdCustomized, setProductIdCustomized] = useState(() => (
-    !product.id && Boolean(draft?.form?.id) && draft.form.id !== slugify(draft.form.title)
-  ));
-  const [imageItems, setImageItems] = useState(() => (draft?.images ?? product.images ?? []).map((url, index) => ({ id: `existing-${index}`, url })));
-  const [recoveredPhotoCount] = useState(() => draft?.pendingPhotoCount ?? 0);
+function ProductEditor({ product, products, sections, onCancel, onSave }) {
+  const [form, setForm] = useState(product);
+  const [productIdCustomized, setProductIdCustomized] = useState(false);
+  const [imageItems, setImageItems] = useState(() => (product.images ?? []).map((url, index) => ({ id: `existing-${index}`, url })));
   const previewUrls = useRef(new Set());
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const isEditing = draft?.isEditing ?? Boolean(product.id);
+  const isEditing = Boolean(product.id);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current.clear();
   }, []);
-
-  useEffect(() => {
-    onDraftChange({
-      product: { ...form, images: imageItems.filter((item) => item.url).map((item) => item.url) },
-      isEditing,
-      form,
-      images: imageItems.filter((item) => item.url).map((item) => item.url),
-      pendingPhotoCount: recoveredPhotoCount + imageItems.filter((item) => item.file).length,
-    });
-  }, [form, imageItems, recoveredPhotoCount, onDraftChange]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -204,11 +179,6 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
         </div>
         <button className="admin-secondary-button" type="button" onClick={onCancel}>Close</button>
       </div>
-      {recoveredPhotoCount > 0 && (
-        <p className="admin-muted" role="status">
-          Your product draft was restored, but {recoveredPhotoCount} newly selected {recoveredPhotoCount === 1 ? "photo was" : "photos were"} not retained by the browser. Please select {recoveredPhotoCount === 1 ? "it" : "them"} again before saving.
-        </p>
-      )}
       <div className="admin-form-grid">
         <label>Store section
           <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)} required>
@@ -296,12 +266,8 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
 function ProductManager({ session, adminBrand, onAdminBrandChange }) {
   const [products, setProducts] = useState([]);
   const [sections, setSections] = useState([]);
-  const [workspace, setWorkspace] = useState(() => readAdminWorkspace(session.user.id));
-  const [persistenceError, setPersistenceError] = useState("");
-  const activeView = workspace.activeView === "site-settings" ? "site-settings" : "products";
-  const [settingsVisited, setSettingsVisited] = useState(activeView === "site-settings");
-  const editorDraft = workspace.editorDraft ?? null;
-  const editorProduct = editorDraft?.product ?? null;
+  const [editorProduct, setEditorProduct] = useState(null);
+  const [activeView, setActiveView] = useState("products");
   const [addingSection, setAddingSection] = useState(false);
   const [sectionTitle, setSectionTitle] = useState("");
   const [creatingSection, setCreatingSection] = useState(false);
@@ -311,27 +277,6 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(`petify-admin-workspace:${session.user.id}`, JSON.stringify(workspace));
-      setPersistenceError("");
-    } catch (storageError) {
-      console.error("The admin workspace could not be saved for recovery.", storageError);
-      setPersistenceError("This browser could not save your admin workspace for recovery. Keep this page open to avoid losing unsaved changes.");
-    }
-  }, [session.user.id, workspace]);
-
-  const saveEditorDraft = useCallback((draft) => {
-    setWorkspace((current) => ({
-      ...current,
-      editorDraft: draft ? {
-        ...draft,
-        key: current.editorDraft?.key ?? draft.key ?? draft.product.id ?? "new",
-        isEditing: current.editorDraft?.isEditing ?? draft.isEditing ?? Boolean(draft.product.id),
-      } : null,
-    }));
-  }, []);
 
   async function refreshProducts() {
     setError("");
@@ -480,45 +425,32 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
       <main className="admin-content">
         <nav className="admin-sidebar" aria-label="Admin pages">
           <p className="admin-eyebrow">WORKSPACE</p>
-          <button type="button" className={activeView === "products" ? "active" : ""} aria-current={activeView === "products" ? "page" : undefined} onClick={() => setWorkspace((current) => ({ ...current, activeView: "products" }))}>Products</button>
-          <button type="button" className={activeView === "site-settings" ? "active" : ""} aria-current={activeView === "site-settings" ? "page" : undefined} onClick={() => {
-            setSettingsVisited(true);
-            setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
-          }}>Site settings</button>
+          <button type="button" className={activeView === "products" ? "active" : ""} aria-current={activeView === "products" ? "page" : undefined} onClick={() => setActiveView("products")}>Products</button>
+          <button type="button" className={activeView === "site-settings" ? "active" : ""} aria-current={activeView === "site-settings" ? "page" : undefined} onClick={() => { setActiveView("site-settings"); setEditorProduct(null); }}>Site settings</button>
           <a href="/">View storefront</a>
         </nav>
         <div className="admin-page-panel">
-          {persistenceError && <p className="admin-error" role="alert">{persistenceError}</p>}
-          <div hidden={activeView !== "site-settings"}>
-            {settingsVisited && (
-              <>
-                <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
-                <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
-              </>
-            )}
-          </div>
-          <div hidden={activeView !== "products"}>
-            {editorProduct ? (
-              <ProductEditor
-                key={editorDraft.key ?? editorProduct.id ?? "new"}
-                product={editorProduct}
-                draft={editorDraft}
-                products={products}
-                sections={sections}
-                onCancel={() => saveEditorDraft(null)}
-                onDraftChange={saveEditorDraft}
-                onSave={async ({ closeEditor = true } = {}) => { await refreshProducts(); if (closeEditor) saveEditorDraft(null); }}
-              />
-            ) : (
-              <>
+          {activeView === "site-settings" ? (
+            <>
+              <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
+              <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
+            </>
+          ) : editorProduct ? (
+            <ProductEditor
+              key={editorProduct.id || "new"}
+              product={editorProduct}
+              products={products}
+              sections={sections}
+              onCancel={() => setEditorProduct(null)}
+              onSave={async ({ closeEditor = true } = {}) => { await refreshProducts(); if (closeEditor) setEditorProduct(null); }}
+            />
+          ) : (
+            <>
               <div className="admin-page-heading">
                 <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Manage products and their storefront sections.</p></div>
                 <div className="admin-heading-actions">
                   <button className="admin-secondary-button" type="button" onClick={() => setAddingSection((current) => !current)}>New section</button>
-                  <button className="admin-primary-button" type="button" disabled={!sections.length} onClick={() => {
-                    const product = blankProduct(products.length + 1, sections);
-                    saveEditorDraft({ key: "new", isEditing: false, product, form: product, images: [], pendingPhotoCount: 0 });
-                  }}>Add product</button>
+                  <button className="admin-primary-button" type="button" disabled={!sections.length} onClick={() => setEditorProduct(blankProduct(products.length + 1, sections))}>Add product</button>
                 </div>
               </div>
               {addingSection && (
@@ -569,10 +501,7 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
                           <td>{sections.find((section) => section.id === product.sectionId)?.title || "Unassigned"}</td>
                           <td>{product.price || "—"}</td>
                           <td><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
-                          <td><div className="admin-row-actions"><button type="button" onClick={() => {
-                            const editableProduct = asEditableProduct(product);
-                            saveEditorDraft({ key: editableProduct.id, isEditing: true, product: editableProduct, form: editableProduct, images: editableProduct.images ?? [], pendingPhotoCount: 0 });
-                          }}>Edit</button><button className="admin-delete-button" type="button" onClick={() => removeProduct(product)}>Delete</button></div></td>
+                          <td><div className="admin-row-actions"><button type="button" onClick={() => setEditorProduct(asEditableProduct(product))}>Edit</button><button className="admin-delete-button" type="button" onClick={() => removeProduct(product)}>Delete</button></div></td>
                         </tr>
                       ))}
                       {!products.length && <tr><td colSpan="5" className="admin-empty">No products yet. Add your first product to begin.</td></tr>}
@@ -580,9 +509,8 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
                   </table>
                 </div>
               )}
-              </>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </main>
     </div>

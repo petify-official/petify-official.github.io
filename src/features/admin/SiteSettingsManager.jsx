@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import StorefrontContentEditor from "./StorefrontContentEditor.jsx";
 import AppearanceSettingsEditor from "./AppearanceSettingsEditor.jsx";
+import AdminSavePreview from "./AdminSavePreview.jsx";
 import {
   getAdminProducts,
   getAdminSections,
@@ -23,9 +24,12 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
   const [savingLogo, setSavingLogo] = useState(false);
   const [savingFavicon, setSavingFavicon] = useState(false);
   const [savingHeroPills, setSavingHeroPills] = useState(false);
+  const [showSavePreview, setShowSavePreview] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const logoFormRef = useRef(null);
+  const faviconFormRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -44,18 +48,22 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
     return () => { active = false; };
   }, []);
 
-  async function submitLogo(event) {
+  function submitLogo(event) {
     event.preventDefault();
     if (!logoFile) return;
-    const form = event.currentTarget;
+    setShowSavePreview("logo");
+  }
+
+  async function confirmLogoSave() {
     setSavingLogo(true);
     setError("");
     setNotice("");
     try {
       setStoreLogo(await updateStoreLogo(logoFile));
       setLogoFile(null);
-      form.reset();
+      logoFormRef.current?.reset();
       setNotice("Logo saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Logo could not be saved.");
     } finally {
@@ -63,18 +71,22 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
     }
   }
 
-  async function submitFavicon(event) {
+  function submitFavicon(event) {
     event.preventDefault();
     if (!faviconFile) return;
-    const form = event.currentTarget;
+    setShowSavePreview("favicon");
+  }
+
+  async function confirmFaviconSave() {
     setSavingFavicon(true);
     setError("");
     setNotice("");
     try {
       setStoreFavicon(await updateStoreFavicon(faviconFile));
       setFaviconFile(null);
-      form.reset();
+      faviconFormRef.current?.reset();
       setNotice("Favicon saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Favicon could not be saved.");
     } finally {
@@ -87,13 +99,20 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
     setNotice("");
   }
 
-  async function submitPills(event) {
+  function submitPills(event) {
     event.preventDefault();
     const nextPills = heroPills.map((pill) => ({ ...pill, label: pill.label.trim() }));
-    if (nextPills.some((pill) => !pill.label)) {
-      setError("Each navigation item needs a label.");
+    if (!nextPills.some((pill) => pill.label || pill.target)) {
+      setError("There is no navigation data to save. Add a label or destination first.");
+      setShowSavePreview("");
       return;
     }
+    setError("");
+    setShowSavePreview("navigation");
+  }
+
+  async function confirmPillsSave() {
+    const nextPills = heroPills.map((pill) => ({ ...pill, label: pill.label.trim() }));
     setSavingHeroPills(true);
     setError("");
     setNotice("");
@@ -101,6 +120,7 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
       await saveHeroPills(nextPills);
       setHeroPills(nextPills);
       setNotice("Hero navigation saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Hero navigation could not be saved.");
     } finally {
@@ -118,19 +138,21 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
       <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
       <section className="admin-settings-block" aria-labelledby="admin-logo-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-logo-settings-title">Store logo</h2></div></div>
-        <form className="admin-store-logo" onSubmit={submitLogo}>
+        <form ref={logoFormRef} className="admin-store-logo" onSubmit={submitLogo}>
           {storeLogo ? <img src={storeLogo} alt="Current store logo" /> : <span className="admin-store-logo-empty">No logo uploaded</span>}
           <label>Upload logo<input type="file" accept="image/*" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} /></label>
-          <button className="admin-primary-button" type="submit" disabled={savingLogo || !logoFile}>{savingLogo ? "Uploading..." : "Save logo"}</button>
+          <button className="admin-primary-button" type="submit" disabled={savingLogo || !logoFile}>{savingLogo ? "Uploading..." : "Preview logo save"}</button>
         </form>
+        {showSavePreview === "logo" && <AdminSavePreview fields={[{ label: "Logo file", value: logoFile?.name ?? "", isFilled: Boolean(logoFile) }]} onConfirm={confirmLogoSave} onCancel={() => setShowSavePreview("")} saving={savingLogo} />}
       </section>
       <section className="admin-settings-block" aria-labelledby="admin-favicon-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-favicon-settings-title">Browser favicon</h2></div></div>
-        <form className="admin-store-logo" onSubmit={submitFavicon}>
+        <form ref={faviconFormRef} className="admin-store-logo" onSubmit={submitFavicon}>
           {storeFavicon ? <img src={storeFavicon} alt="Current browser favicon" /> : <span className="admin-store-logo-empty">Default icon</span>}
           <label>Upload favicon<input type="file" accept="image/*,.ico" onChange={(event) => setFaviconFile(event.target.files?.[0] ?? null)} /></label>
-          <button className="admin-primary-button" type="submit" disabled={savingFavicon || !faviconFile}>{savingFavicon ? "Uploading..." : "Save favicon"}</button>
+          <button className="admin-primary-button" type="submit" disabled={savingFavicon || !faviconFile}>{savingFavicon ? "Uploading..." : "Preview favicon save"}</button>
         </form>
+        {showSavePreview === "favicon" && <AdminSavePreview fields={[{ label: "Favicon file", value: faviconFile?.name ?? "", isFilled: Boolean(faviconFile) }]} onConfirm={confirmFaviconSave} onCancel={() => setShowSavePreview("")} saving={savingFavicon} />}
       </section>
       <section className="admin-settings-block" aria-labelledby="admin-navigation-settings-title">
         <div className="admin-settings-heading">
@@ -140,7 +162,7 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
         <form className="admin-hero-pills" onSubmit={submitPills}>
           {heroPills.map((pill, index) => (
             <div className="admin-hero-pill-row" key={pill.id}>
-              <label>Label<input value={pill.label} onChange={(event) => updatePill(index, "label", event.target.value)} required /></label>
+              <label>Label<input value={pill.label} onChange={(event) => updatePill(index, "label", event.target.value)} /></label>
               <label>Destination
                 <select value={pill.target || ""} onChange={(event) => updatePill(index, "target", event.target.value)}>
                   <option value="">No destination</option>
@@ -156,6 +178,17 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
           ))}
           <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={savingHeroPills}>{savingHeroPills ? "Saving..." : "Save navigation"}</button></div>
         </form>
+        {showSavePreview === "navigation" && (
+          <AdminSavePreview
+            fields={heroPills.flatMap((pill, index) => [
+              { label: `Link ${index + 1} label`, value: pill.label, isFilled: Boolean(pill.label.trim()) },
+              { label: `Link ${index + 1} destination`, value: pill.target, isFilled: Boolean(pill.target) },
+            ])}
+            onConfirm={confirmPillsSave}
+            onCancel={() => setShowSavePreview("")}
+            saving={savingHeroPills}
+          />
+        )}
       </section>
     </div>
   );

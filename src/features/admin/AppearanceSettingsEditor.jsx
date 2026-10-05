@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import AdminSavePreview from "./AdminSavePreview.jsx";
 import {
   COLOR_PALETTES,
   DEFAULT_COLOR_PALETTE,
@@ -37,8 +38,10 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
   const [savingPalette, setSavingPalette] = useState(false);
   const [savingAdminBrand, setSavingAdminBrand] = useState(false);
   const [savingLoadingScreen, setSavingLoadingScreen] = useState(false);
+  const [showSavePreview, setShowSavePreview] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const loadingScreenFormRef = useRef(null);
 
   useEffect(() => {
     if (!imageFile) {
@@ -74,9 +77,19 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     setNotice("");
   }
 
-  async function submitAdminBrand(event) {
+  function submitAdminBrand(event) {
     event.preventDefault();
-    const nextAdminBrand = normalizeAdminBrand(dashboardBrand);
+    if (!dashboardBrand.name.trim() && !dashboardBrand.label.trim()) {
+      setError("There is no dashboard branding to save. Add at least one value first.");
+      setShowSavePreview("");
+      return;
+    }
+    setError("");
+    setShowSavePreview("admin-brand");
+  }
+
+  async function confirmAdminBrandSave() {
+    const nextAdminBrand = { name: dashboardBrand.name.trim(), label: dashboardBrand.label.trim() };
     setSavingAdminBrand(true);
     setError("");
     setNotice("");
@@ -85,6 +98,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       setDashboardBrand(nextAdminBrand);
       onAdminBrandChange(nextAdminBrand);
       setNotice("Dashboard branding saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Dashboard branding could not be saved.");
     } finally {
@@ -111,14 +125,19 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     setNotice("");
   }
 
-  async function submitPalette(event) {
+  function submitPalette(event) {
     event.preventDefault();
+    setShowSavePreview("palette");
+  }
+
+  async function confirmPaletteSave() {
     setSavingPalette(true);
     setError("");
     setNotice("");
     try {
       await saveColorPalette(palette);
       setNotice("Color palette saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Color palette could not be saved.");
     } finally {
@@ -131,9 +150,18 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     setNotice("");
   }
 
-  async function submitLoadingScreen(event) {
+  function submitLoadingScreen(event) {
     event.preventDefault();
-    const form = event.currentTarget;
+    if (!loadingScreen.kicker.trim() && !loadingScreen.title.trim() && !loadingScreen.message.trim() && !imageFile) {
+      setError("There is no loading screen data to save. Add at least one value or image first.");
+      setShowSavePreview("");
+      return;
+    }
+    setError("");
+    setShowSavePreview("loading-screen");
+  }
+
+  async function confirmLoadingScreenSave() {
     setSavingLoadingScreen(true);
     setError("");
     setNotice("");
@@ -146,8 +174,9 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       await saveLoadingScreen(nextLoadingScreen);
       setLoadingScreen(nextLoadingScreen);
       setImageFile(null);
-      form.reset();
+      loadingScreenFormRef.current?.reset();
       setNotice("Loading screen saved.");
+      setShowSavePreview("");
     } catch (saveError) {
       setError(saveError.message || "Loading screen could not be saved.");
     } finally {
@@ -166,12 +195,23 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       {notice && <p className="admin-success" role="status">{notice}</p>}
       <form className="admin-form-grid admin-loading-screen-form" onSubmit={submitAdminBrand}>
         <h3 className="admin-span-two">Admin dashboard brand</h3>
-        <label>Dashboard name<input value={dashboardBrand.name} onChange={(event) => updateAdminBrand("name", event.target.value)} required /></label>
-        <label>Dashboard label<input value={dashboardBrand.label} onChange={(event) => updateAdminBrand("label", event.target.value)} required /></label>
+        <label>Dashboard name<input value={dashboardBrand.name} onChange={(event) => updateAdminBrand("name", event.target.value)} /></label>
+        <label>Dashboard label<input value={dashboardBrand.label} onChange={(event) => updateAdminBrand("label", event.target.value)} /></label>
         <div className="admin-form-actions admin-span-two">
-          <button className="admin-primary-button" type="submit" disabled={savingAdminBrand}>{savingAdminBrand ? "Saving..." : "Save dashboard branding"}</button>
+          <button className="admin-primary-button" type="submit" disabled={savingAdminBrand}>{savingAdminBrand ? "Saving..." : "Preview branding save"}</button>
         </div>
       </form>
+      {showSavePreview === "admin-brand" && (
+        <AdminSavePreview
+          fields={[
+            { label: "Dashboard name", value: dashboardBrand.name, isFilled: Boolean(dashboardBrand.name.trim()) },
+            { label: "Dashboard label", value: dashboardBrand.label, isFilled: Boolean(dashboardBrand.label.trim()) },
+          ]}
+          onConfirm={confirmAdminBrandSave}
+          onCancel={() => setShowSavePreview("")}
+          saving={savingAdminBrand}
+        />
+      )}
       <form className="admin-form-grid" onSubmit={submitPalette}>
         <label className="admin-span-two">Color palette
           <select value={palette.preset} onChange={(event) => choosePreset(event.target.value)}>
@@ -186,22 +226,46 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
           ))}
         </fieldset>
         <div className="admin-form-actions admin-span-two">
-          <button className="admin-primary-button" type="submit" disabled={savingPalette}>{savingPalette ? "Saving..." : "Save color palette"}</button>
+          <button className="admin-primary-button" type="submit" disabled={savingPalette}>{savingPalette ? "Saving..." : "Preview palette save"}</button>
         </div>
       </form>
-      <form className="admin-form-grid admin-loading-screen-form" onSubmit={submitLoadingScreen}>
+      {showSavePreview === "palette" && (
+        <AdminSavePreview
+          fields={[
+            { label: "Palette preset", value: COLOR_PALETTES[palette.preset]?.name ?? "Custom colors", isFilled: true },
+            ...colorFields.map(([key, label]) => ({ label, value: palette.colors[key], isFilled: true })),
+          ]}
+          onConfirm={confirmPaletteSave}
+          onCancel={() => setShowSavePreview("")}
+          saving={savingPalette}
+        />
+      )}
+      <form ref={loadingScreenFormRef} className="admin-form-grid admin-loading-screen-form" onSubmit={submitLoadingScreen}>
         <h3 className="admin-span-two">Loading screen content</h3>
-        <label>Small heading<input value={loadingScreen.kicker} onChange={(event) => updateLoadingScreen("kicker", event.target.value)} required /></label>
-        <label>Main heading<input value={loadingScreen.title} onChange={(event) => updateLoadingScreen("title", event.target.value)} required /></label>
-        <label className="admin-span-two">Message<input value={loadingScreen.message} onChange={(event) => updateLoadingScreen("message", event.target.value)} required /></label>
+        <label>Small heading<input value={loadingScreen.kicker} onChange={(event) => updateLoadingScreen("kicker", event.target.value)} /></label>
+        <label>Main heading<input value={loadingScreen.title} onChange={(event) => updateLoadingScreen("title", event.target.value)} /></label>
+        <label className="admin-span-two">Message<input value={loadingScreen.message} onChange={(event) => updateLoadingScreen("message", event.target.value)} /></label>
         <div className="admin-loading-image admin-span-two">
           <img src={imagePreview || loadingScreen.imageUrl} alt="Loading screen preview" />
           <label>Loading image<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
         </div>
         <div className="admin-form-actions admin-span-two">
-          <button className="admin-primary-button" type="submit" disabled={savingLoadingScreen}>{savingLoadingScreen ? "Saving..." : "Save loading screen"}</button>
+          <button className="admin-primary-button" type="submit" disabled={savingLoadingScreen}>{savingLoadingScreen ? "Saving..." : "Preview loading screen save"}</button>
         </div>
       </form>
+      {showSavePreview === "loading-screen" && (
+        <AdminSavePreview
+          fields={[
+            { label: "Small heading", value: loadingScreen.kicker, isFilled: Boolean(loadingScreen.kicker.trim()) },
+            { label: "Main heading", value: loadingScreen.title, isFilled: Boolean(loadingScreen.title.trim()) },
+            { label: "Message", value: loadingScreen.message, isFilled: Boolean(loadingScreen.message.trim()) },
+            { label: "Loading image", value: imageFile?.name ?? loadingScreen.imageUrl, isFilled: Boolean(imageFile || loadingScreen.imageUrl) },
+          ]}
+          onConfirm={confirmLoadingScreenSave}
+          onCancel={() => setShowSavePreview("")}
+          saving={savingLoadingScreen}
+        />
+      )}
     </section>
   );
 }
