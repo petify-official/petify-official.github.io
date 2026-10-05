@@ -65,7 +65,9 @@ export default function SalesDashboard({ products }) {
   const enteredDiscount = Number(discount) || 0;
   const discountAmount = roundMoney(discountType === "percentage" ? subtotal * enteredDiscount / 100 : enteredDiscount);
   const discountInvalid = enteredDiscount < 0 || (discountType === "percentage" ? enteredDiscount > 100 : discountAmount > subtotal);
-  const total = roundMoney(Math.max(subtotal - discountAmount, 0));
+  const discountedTotal = roundMoney(Math.max(subtotal - discountAmount, 0));
+  const total = Math.round(discountedTotal);
+  const roundingAdjustment = roundMoney(total - discountedTotal);
   const requestedPaidAmount = roundMoney(Math.max(Number(paidAmount) || 0, 0));
   const paidAmountInvalid = requestedPaidAmount > total || Number(paidAmount) < 0;
   const filteredSales = sales.filter((sale) => filter === "all" || sale.source === filter);
@@ -279,6 +281,7 @@ export default function SalesDashboard({ products }) {
           <div className="sales-total-box">
             <div><span>Subtotal</span><strong>{formatProductPrice(subtotal)}</strong></div>
             <div><span>Discount</span><strong>− {formatProductPrice(discountAmount)}</strong></div>
+            <div><span>Rounding adjustment</span><strong>{roundingAdjustment > 0 ? "+" : ""}{formatProductPrice(roundingAdjustment)}</strong></div>
             <div className="sales-final-total"><span>Total</span><strong>{formatProductPrice(total)}</strong></div>
             <div><span>Paid</span><strong>{formatProductPrice(requestedPaidAmount)}</strong></div>
             <div><span>Pending</span><strong>{formatProductPrice(Math.max(total - requestedPaidAmount, 0))}</strong></div>

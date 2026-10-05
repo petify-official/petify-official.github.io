@@ -64,8 +64,17 @@ create table if not exists public.sales (
   updated_at timestamptz not null default now(),
   constraint sales_discount_not_over_subtotal check (discount <= subtotal),
   constraint sales_paid_not_over_total check (amount_paid <= total),
-  constraint sales_total_matches_subtotal check (total = subtotal - discount)
+  constraint sales_total_matches_subtotal check (
+    total = subtotal - discount or total = round(subtotal - discount)
+  )
 );
+
+alter table public.sales
+  drop constraint if exists sales_total_matches_subtotal;
+
+alter table public.sales
+  add constraint sales_total_matches_subtotal
+  check (total = subtotal - discount or total = round(subtotal - discount));
 
 create index if not exists sales_customer_created_idx
   on public.sales (customer_id, created_at desc);
@@ -227,7 +236,7 @@ begin
   if v_discount < 0 or v_discount > v_subtotal then
     raise exception 'Discount must be between zero and the sale subtotal.';
   end if;
-  v_total := v_subtotal - v_discount;
+  v_total := round(v_subtotal - v_discount);
   v_paid := coalesce(p_paid_amount, 0)::numeric(12, 2);
   if v_paid < 0 or v_paid > v_total then
     raise exception 'Payment must be between zero and the sale total.';
