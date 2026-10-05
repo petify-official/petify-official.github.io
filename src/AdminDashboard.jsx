@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import SiteSettingsManager from "./features/admin/SiteSettingsManager.jsx";
 import SalesDashboard from "./features/sales/SalesDashboard.jsx";
 import { supabase } from "./lib/supabase.js";
+import { formatProductPrice } from "./lib/productPricing.js";
 import { DEFAULT_ADMIN_BRAND, normalizeAdminBrand } from "./config/siteAppearance.js";
 import {
   createCatalogSection,
@@ -26,6 +27,8 @@ const blankProduct = (displayOrder, sections) => ({
   description: "",
   specsText: "",
   images: [],
+  variants: [],
+  variantsEnabled: false,
   saveTag: "",
   price: "",
   oldPrice: "",
@@ -46,8 +49,27 @@ function slugify(value) {
 function asEditableProduct(product) {
   return {
     ...product,
+    variants: product.variants ?? [],
+    variantsEnabled: Boolean(product.variants?.length),
     specsText: (product.specs ?? []).map((spec) => String(spec).replace(/<[^>]*>/g, "")).join("\n"),
   };
+}
+
+function parseVariantPrice(value) {
+  const normalized = String(value ?? "").trim();
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(normalized)) return Number.NaN;
+  return Number(normalized.replace(/,/g, ""));
+}
+
+function productPriceLabel(product) {
+  if (!product.variants?.length) return product.price || "—";
+  const prices = product.variants.map((variant) => Number(variant.price));
+  const minimum = Math.min(...prices);
+  const maximum = Math.max(...prices);
+  const priceRange = minimum === maximum
+    ? formatProductPrice(minimum)
+    : `${formatProductPrice(minimum)} – ${formatProductPrice(maximum)}`;
+  return `${priceRange} · ${product.variants.length} options`;
 }
 
 function readAdminWorkspace(userId) {
@@ -96,7 +118,12 @@ function AdminLogin({ adminBrand, onSignedIn }) {
 }
 
 function ProductEditor({ product, draft, products, sections, onCancel, onDraftChange, onSave }) {
-  const [form, setForm] = useState(() => draft?.form ?? product);
+  const [form, setForm] = useState(() => ({
+    ...product,
+    variants: product.variants ?? [],
+    variantsEnabled: Boolean(product.variants?.length),
+    ...(draft?.form ?? {}),
+  }));
   const [productIdCustomized, setProductIdCustomized] = useState(() => (
     !product.id && Boolean(draft?.form?.id) && draft.form.id !== slugify(draft.form.title)
   ));
@@ -126,6 +153,51 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function addVariant() {
+    setForm((current) => ({
+      ...current,
+      variants: [...(current.variants ?? []), {
+        id: crypto.randomUUID(),
+        label: "",
+        price: "",
+        oldPrice: "",
+      }],
+    }));
+  }
+
+  function updateVariant(variantId, field, value) {
+    setForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant) => (
+        variant.id === variantId ? { ...variant, [field]: value } : variant
+      )),
+    }));
+  }
+
+  function removeVariant(variantId) {
+    setForm((current) => ({
+      ...current,
+      variants: current.variants.filter((variant) => variant.id !== variantId),
+    }));
+  }
+
+  function toggleVariants(enabled) {
+    setForm((current) => {
+      if (enabled) return { ...current, variantsEnabled: true };
+      const firstVariant = current.variants?.[0];
+      if (!firstVariant) return { ...current, variantsEnabled: false, variants: [] };
+      const price = parseVariantPrice(firstVariant.price);
+      const oldPrice = firstVariant.oldPrice ? parseVariantPrice(firstVariant.oldPrice) : Number.NaN;
+      return {
+        ...current,
+        variantsEnabled: false,
+        variants: [],
+        price: Number.isFinite(price) ? formatProductPrice(price) : current.price,
+        oldPrice: Number.isFinite(oldPrice) ? formatProductPrice(oldPrice) : "",
+      };
+    });
   }
 
   function updateTitle(title) {
@@ -164,6 +236,28 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
       if (!isEditing && products.some((existingProduct) => existingProduct.id === id)) {
         throw new Error(`The product ID "${id}" is already in use. Choose a different ID.`);
       }
+      const variants = form.variantsEnabled
+        ? form.variants.map((variant) => ({
+          ...variant,
+          label: variant.label.trim(),
+          price: parseVariantPrice(variant.price),
+          oldPrice: variant.oldPrice === null || variant.oldPrice === undefined || String(variant.oldPrice).trim() === ""
+            ? null
+            : parseVariantPrice(variant.oldPrice),
+        }))
+        : [];
+      if (form.variantsEnabled && !variants.length) {
+        throw new Error("Add at least one variety or turn off purchasable varieties.");
+      }
+      if (variants.some((variant) => (
+        !variant.label || !Number.isFinite(variant.price) || variant.price < 0
+        || (variant.oldPrice !== null && (!Number.isFinite(variant.oldPrice) || variant.oldPrice < 0))
+      ))) {
+        throw new Error("Each variety needs a label and a valid price. Previous prices must also be valid amounts.");
+      }
+      if (new Set(variants.map((variant) => variant.label.toLowerCase())).size !== variants.length) {
+        throw new Error("Each variety needs a unique label.");
+      }
       const queuedFiles = imageItems.filter((item) => item.file);
       const uploaded = queuedFiles.length
         ? await uploadProductImages(id, queuedFiles.map((item) => item.file), ({ completed, total, fileName }) => {
@@ -184,6 +278,7 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
         isNew: !isEditing,
         specs: form.specsText.split("\n").map((item) => item.trim()).filter(Boolean),
         images,
+        variants,
         displayOrder: Number(form.displayOrder) || 0,
       });
       setUploadProgress({ message: "Product saved", percent: 100 });
@@ -240,8 +335,27 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
         <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} required /></label>
         {form.type === "single" && <label className="admin-span-two">Product details, one per line<textarea rows="4" value={form.specsText} onChange={(event) => update("specsText", event.target.value)} placeholder={"Material: Cotton\nSize: Medium"} /></label>}
         {form.type === "combo" && <label>Offer tag<input value={form.saveTag} onChange={(event) => update("saveTag", event.target.value)} placeholder="SAVE ₹65" /></label>}
-        <label>Price<input value={form.price} onChange={(event) => update("price", event.target.value)} placeholder="₹599" /></label>
-        <label>Previous price<input value={form.oldPrice} onChange={(event) => update("oldPrice", event.target.value)} placeholder="₹664" /></label>
+        <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={Boolean(form.variantsEnabled)} onChange={(event) => toggleVariants(event.target.checked)} /> This product has purchasable varieties with different prices</label>
+        {form.variantsEnabled ? (
+          <fieldset className="product-variants-editor admin-span-two">
+            <legend>Varieties and prices</legend>
+            <p className="admin-field-hint">Add one option per size, pack quantity, or type. Keep the three gallery photos in Product photos; those are the product gallery, not separate varieties.</p>
+            {(form.variants ?? []).map((variant, index) => (
+              <div className="product-variant-row" key={variant.id}>
+                <label>Option label<input value={variant.label} onChange={(event) => updateVariant(variant.id, "label", event.target.value)} placeholder="e.g. 250 g, 500 g, Pack of 4" required /></label>
+                <label>Price (₹)<input type="text" inputMode="decimal" value={variant.price} onChange={(event) => updateVariant(variant.id, "price", event.target.value)} placeholder="1,299" required /></label>
+                <label>Previous price (₹)<input type="text" inputMode="decimal" value={variant.oldPrice ?? ""} onChange={(event) => updateVariant(variant.id, "oldPrice", event.target.value)} placeholder="Optional" /></label>
+                <button className="admin-delete-button" type="button" aria-label={`Remove variety ${index + 1}`} onClick={() => removeVariant(variant.id)}>Remove</button>
+              </div>
+            ))}
+            <button className="admin-secondary-button" type="button" onClick={addVariant}>Add variety</button>
+          </fieldset>
+        ) : (
+          <>
+            <label>Price<input value={form.price} onChange={(event) => update("price", event.target.value)} placeholder="₹1,299" /></label>
+            <label>Previous price<input value={form.oldPrice} onChange={(event) => update("oldPrice", event.target.value)} placeholder="₹1,499" /></label>
+          </>
+        )}
         <label className="admin-span-two">WhatsApp order message<input value={form.defaultWhatsappMsg} onChange={(event) => update("defaultWhatsappMsg", event.target.value)} required /></label>
         <label className="admin-span-two">Product photos<input type="file" accept="image/*" multiple onChange={(event) => {
           const selected = Array.from(event.target.files ?? []).map((file) => {
@@ -575,13 +689,13 @@ function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }
               {loading ? <p className="admin-muted">Loading products...</p> : (
                 <div className="admin-table-wrap">
                   <table className="admin-table">
-                    <thead><tr><th>Product</th><th>Section</th><th>Price</th><th>Visibility</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Product</th><th>Section</th><th>Price / varieties</th><th>Visibility</th><th>Actions</th></tr></thead>
                     <tbody>
                       {products.map((product) => (
                         <tr key={product.id}>
                           <td><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title}</strong><span>{product.id}</span></div></div></td>
                           <td>{sections.find((section) => section.id === product.sectionId)?.title || "Unassigned"}</td>
-                          <td>{product.price || "—"}</td>
+                          <td>{productPriceLabel(product)}</td>
                           <td><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
                           <td><div className="admin-row-actions"><button type="button" onClick={() => {
                             const editableProduct = asEditableProduct(product);

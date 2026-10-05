@@ -1,5 +1,25 @@
 create sequence if not exists public.sales_invoice_number_seq;
 
+alter table public.products
+  add column if not exists variants jsonb not null default '[]'::jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'products_variants_is_array'
+      and conrelid = 'public.products'::regclass
+  ) then
+    alter table public.products
+      add constraint products_variants_is_array
+      check (jsonb_typeof(variants) = 'array')
+      not valid;
+  end if;
+end;
+$$;
+
+alter table public.products validate constraint products_variants_is_array;
+
 alter table public.site_settings
   add column if not exists sales_settings jsonb not null default
     '{"enabled":true,"invoice_prefix":"INV","default_payment_method":"cash"}'::jsonb;
@@ -63,6 +83,10 @@ create table if not exists public.sale_items (
   created_at timestamptz not null default now(),
   constraint sale_item_total_matches check (line_total = quantity * unit_price)
 );
+
+alter table public.sale_items
+  add column if not exists product_variant_id text,
+  add column if not exists variant_label text;
 
 create index if not exists sale_items_sale_idx on public.sale_items (sale_id);
 
@@ -138,6 +162,8 @@ declare
   v_sequence bigint;
   v_item jsonb;
   v_product public.products%rowtype;
+  v_variant_id text;
+  v_variant_label text;
   v_quantity integer;
   v_unit_price numeric(12, 2);
   v_line_total numeric(12, 2);
@@ -172,6 +198,20 @@ begin
       where id = nullif(v_item->>'product_id', '');
     if not found then
       raise exception 'A selected product no longer exists.';
+    end if;
+
+    v_variant_id := nullif(v_item->>'variant_id', '');
+    v_variant_label := null;
+    if jsonb_array_length(coalesce(v_product.variants, '[]'::jsonb)) > 0 and v_variant_id is null then
+      raise exception 'Choose a variety for each product that has varieties.';
+    end if;
+    if v_variant_id is not null then
+      select variant->>'label' into v_variant_label
+        from jsonb_array_elements(coalesce(v_product.variants, '[]'::jsonb)) as variants(variant)
+        where variant->>'id' = v_variant_id;
+      if not found then
+        raise exception 'A selected product variety no longer exists.';
+      end if;
     end if;
 
     v_quantity := (v_item->>'quantity')::integer;
@@ -254,14 +294,23 @@ begin
     select * into v_product
       from public.products
       where id = nullif(v_item->>'product_id', '');
+    v_variant_id := nullif(v_item->>'variant_id', '');
+    v_variant_label := null;
+    if v_variant_id is not null then
+      select variant->>'label' into v_variant_label
+        from jsonb_array_elements(coalesce(v_product.variants, '[]'::jsonb)) as variants(variant)
+        where variant->>'id' = v_variant_id;
+    end if;
     v_quantity := (v_item->>'quantity')::integer;
     v_unit_price := (v_item->>'unit_price')::numeric(12, 2);
     v_line_total := v_quantity * v_unit_price;
     insert into public.sale_items (
-      sale_id, product_id, product_name, quantity, unit_price, line_total
+      sale_id, product_id, product_name, product_variant_id, variant_label,
+      quantity, unit_price, line_total
     )
     values (
-      v_sale_id, v_product.id, v_product.title, v_quantity, v_unit_price, v_line_total
+      v_sale_id, v_product.id, v_product.title, v_variant_id, v_variant_label,
+      v_quantity, v_unit_price, v_line_total
     );
   end loop;
 

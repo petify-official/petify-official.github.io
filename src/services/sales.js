@@ -65,6 +65,7 @@ export async function createManualSale(sale) {
     p_customer_phone: sale.customer.phone || null,
     p_items: sale.items.map((item) => ({
       product_id: item.productId,
+      variant_id: item.variantId || null,
       quantity: item.quantity,
       unit_price: item.unitPrice,
     })),

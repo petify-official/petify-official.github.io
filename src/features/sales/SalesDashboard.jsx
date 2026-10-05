@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatProductPrice, parseProductPrice } from "../../lib/productPricing.js";
 import { createManualSale, getSales, getSalesSettings, recordSalePayment } from "../../services/sales.js";
 import "./sales.css";
 
@@ -9,20 +10,6 @@ const paymentMethods = [
   ["bank_transfer", "Bank transfer"],
   ["other", "Other"],
 ];
-
-function parsePrice(value) {
-  const normalized = String(value ?? "").replace(/[^\d.-]/g, "");
-  const price = Number.parseFloat(normalized);
-  return Number.isFinite(price) ? price : 0;
-}
-
-function money(value) {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 2,
-  }).format(Number(value ?? 0));
-}
 
 function dateLabel(value) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(value));
@@ -39,7 +26,8 @@ export default function SalesDashboard({ products }) {
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
+  const [selectedVariantId, setSelectedVariantId] = useState("");
   const [items, setItems] = useState([]);
   const [discount, setDiscount] = useState("0");
   const [discountType, setDiscountType] = useState("amount");
@@ -55,6 +43,9 @@ export default function SalesDashboard({ products }) {
   const [notice, setNotice] = useState("");
 
   const activeProducts = useMemo(() => products.filter((product) => product.isActive), [products]);
+  const selectedProduct = activeProducts.find((product) => product.id === selectedProductId);
+  const selectedVariants = selectedProduct?.variants ?? [];
+  const selectedOption = selectedVariants.find((variant) => variant.id === selectedVariantId) ?? selectedVariants[0] ?? null;
   const customers = useMemo(() => {
     const unique = new Map();
     sales.forEach((sale) => {
@@ -113,10 +104,25 @@ export default function SalesDashboard({ products }) {
   function addProduct() {
     const product = activeProducts.find((entry) => entry.id === selectedProductId);
     if (!product) return;
+    const variant = product.variants?.length
+      ? product.variants.find((entry) => entry.id === (selectedVariantId || product.variants[0].id))
+      : null;
+    if (product.variants?.length && !variant) return;
+    const variantId = variant?.id ?? "";
+    const lineKey = `${product.id}::${variantId || "default"}`;
+    const unitPrice = roundMoney(variant ? Number(variant.price) : parseProductPrice(product.price));
     setItems((current) => {
-      const existing = current.find((item) => item.productId === product.id);
-      if (existing) return current.map((item) => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item);
-      return [...current, { productId: product.id, productName: product.title, quantity: 1, unitPrice: roundMoney(parsePrice(product.price)) }];
+      const existing = current.find((item) => item.lineKey === lineKey);
+      if (existing) return current.map((item) => item.lineKey === lineKey ? { ...item, quantity: item.quantity + 1 } : item);
+      return [...current, {
+        lineKey,
+        productId: product.id,
+        variantId,
+        variantLabel: variant?.label ?? "",
+        productName: product.title,
+        quantity: 1,
+        unitPrice,
+      }];
     });
   }
 
@@ -128,7 +134,7 @@ export default function SalesDashboard({ products }) {
     try {
       await createManualSale({
         customer: { name: customerName.trim(), email: customerEmail.trim(), phone: customerPhone.trim() },
-        items: items.map(({ productId, quantity, unitPrice }) => ({ productId, quantity, unitPrice })),
+        items: items.map(({ productId, variantId, quantity, unitPrice }) => ({ productId, variantId, quantity, unitPrice })),
         discount: discountAmount,
         paidAmount: requestedPaidAmount,
         paymentMethod,
@@ -191,9 +197,9 @@ export default function SalesDashboard({ products }) {
       )}
 
       <div className="sales-summary-grid">
-        <div className="sales-metric-card"><span>Recorded sales</span><strong>{money(totals.revenue)}</strong><small>{sales.length} invoices in Supabase</small></div>
-        <div className="sales-metric-card"><span>Paid</span><strong>{money(totals.paid)}</strong><small>Payments recorded</small></div>
-        <div className="sales-metric-card"><span>Pending</span><strong>{money(totals.pending)}</strong><small>Outstanding balance</small></div>
+        <div className="sales-metric-card"><span>Recorded sales</span><strong>{formatProductPrice(totals.revenue)}</strong><small>{sales.length} invoices in Supabase</small></div>
+        <div className="sales-metric-card"><span>Paid</span><strong>{formatProductPrice(totals.paid)}</strong><small>Payments recorded</small></div>
+        <div className="sales-metric-card"><span>Pending</span><strong>{formatProductPrice(totals.pending)}</strong><small>Outstanding balance</small></div>
         <div className="sales-metric-card"><span>Invoices</span><strong>{sales.length}</strong><small>Persistent cloud records</small></div>
       </div>
 
@@ -215,23 +221,45 @@ export default function SalesDashboard({ products }) {
 
           <div className="sales-product-row">
             <label>Search catalog product
-              <select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
+              <select value={selectedProductId} onChange={(event) => {
+                const productId = event.target.value;
+                setSelectedProductId(productId);
+                setSelectedVariantId(activeProducts.find((product) => product.id === productId)?.variants?.[0]?.id ?? "");
+              }}>
                 <option value="">Choose a product</option>
-                {activeProducts.map((product) => <option key={product.id} value={product.id}>{product.title} · {money(parsePrice(product.price))}</option>)}
+                {activeProducts.map((product) => {
+                  const prices = product.variants?.length
+                    ? product.variants.map((variant) => Number(variant.price))
+                    : [parseProductPrice(product.price)];
+                  const lowestPrice = Math.min(...prices);
+                  const highestPrice = Math.max(...prices);
+                  const priceLabel = lowestPrice === highestPrice
+                    ? formatProductPrice(lowestPrice)
+                    : `${formatProductPrice(lowestPrice)} – ${formatProductPrice(highestPrice)}`;
+                  return <option key={product.id} value={product.id}>{product.title} · {priceLabel}</option>;
+                })}
               </select>
             </label>
-            <button type="button" className="admin-primary-button" onClick={addProduct} disabled={!selectedProductId}>Add product</button>
+            {selectedVariants.length > 0 && (
+              <label>
+                Variety
+                <select value={selectedOption?.id ?? ""} onChange={(event) => setSelectedVariantId(event.target.value)}>
+                  {selectedVariants.map((variant) => <option key={variant.id} value={variant.id}>{variant.label} · {formatProductPrice(variant.price)}</option>)}
+                </select>
+              </label>
+            )}
+            <button type="button" className="admin-primary-button" onClick={addProduct} disabled={!selectedProductId || (selectedVariants.length > 0 && !selectedOption)}>Add product</button>
           </div>
 
           {items.length ? (
             <div className="sales-line-items">
               {items.map((item) => (
-                <div className="sales-line-item" key={item.productId}>
-                  <div><strong>{item.productName}</strong><span>{item.productId}</span></div>
-                  <div className="sales-line-quantity"><label>Qty<input type="number" min="1" step="1" value={item.quantity} onChange={(event) => setItems((current) => current.map((line) => line.productId === item.productId ? { ...line, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : line))} /></label></div>
-                  <div className="sales-line-price"><label>Unit price<input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => setItems((current) => current.map((line) => line.productId === item.productId ? { ...line, unitPrice: roundMoney(Math.max(0, Number(event.target.value) || 0)) } : line))} /></label></div>
-                  <div className="sales-line-total">{money(roundMoney(item.quantity * item.unitPrice))}</div>
-                  <button type="button" className="admin-delete-button" onClick={() => setItems((current) => current.filter((line) => line.productId !== item.productId))}>Remove</button>
+                <div className="sales-line-item" key={item.lineKey}>
+                  <div><strong>{item.productName}</strong><span>{item.variantLabel || item.productId}</span></div>
+                  <div className="sales-line-quantity"><label>Qty<input type="number" min="1" step="1" value={item.quantity} onChange={(event) => setItems((current) => current.map((line) => line.lineKey === item.lineKey ? { ...line, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : line))} /></label></div>
+                  <div className="sales-line-price"><label>Unit price<input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => setItems((current) => current.map((line) => line.lineKey === item.lineKey ? { ...line, unitPrice: roundMoney(Math.max(0, Number(event.target.value) || 0)) } : line))} /></label></div>
+                  <div className="sales-line-total">{formatProductPrice(roundMoney(item.quantity * item.unitPrice))}</div>
+                  <button type="button" className="admin-delete-button" onClick={() => setItems((current) => current.filter((line) => line.lineKey !== item.lineKey))}>Remove</button>
                 </div>
               ))}
             </div>
@@ -249,11 +277,11 @@ export default function SalesDashboard({ products }) {
             <label>Notes<textarea rows="2" value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
           </div>
           <div className="sales-total-box">
-            <div><span>Subtotal</span><strong>{money(subtotal)}</strong></div>
-            <div><span>Discount</span><strong>− {money(discountAmount)}</strong></div>
-            <div className="sales-final-total"><span>Total</span><strong>{money(total)}</strong></div>
-            <div><span>Paid</span><strong>{money(requestedPaidAmount)}</strong></div>
-            <div><span>Pending</span><strong>{money(Math.max(total - requestedPaidAmount, 0))}</strong></div>
+            <div><span>Subtotal</span><strong>{formatProductPrice(subtotal)}</strong></div>
+            <div><span>Discount</span><strong>− {formatProductPrice(discountAmount)}</strong></div>
+            <div className="sales-final-total"><span>Total</span><strong>{formatProductPrice(total)}</strong></div>
+            <div><span>Paid</span><strong>{formatProductPrice(requestedPaidAmount)}</strong></div>
+            <div><span>Pending</span><strong>{formatProductPrice(Math.max(total - requestedPaidAmount, 0))}</strong></div>
           </div>
           {discountInvalid && <p className="admin-error" role="alert">Discount cannot exceed the subtotal or be negative.</p>}
           {paidAmountInvalid && <p className="admin-error" role="alert">Payment must be between zero and the sale total.</p>}
@@ -268,12 +296,12 @@ export default function SalesDashboard({ products }) {
               <>
                 <div className="sales-customer-metrics">
                   <div><span>Invoices</span><strong>{profileSales.length}</strong></div>
-                  <div><span>Total purchases</span><strong>{money(profileSummary.purchases)}</strong></div>
-                  <div><span>Paid</span><strong>{money(profileSummary.paid)}</strong></div>
-                  <div><span>Pending</span><strong>{money(profileSummary.pending)}</strong></div>
+                  <div><span>Total purchases</span><strong>{formatProductPrice(profileSummary.purchases)}</strong></div>
+                  <div><span>Paid</span><strong>{formatProductPrice(profileSummary.paid)}</strong></div>
+                  <div><span>Pending</span><strong>{formatProductPrice(profileSummary.pending)}</strong></div>
                 </div>
                 <ul className="sales-profile-history">
-                  {profileSales.map((sale) => <li key={sale.id}>{sale.invoice_number} · {dateLabel(sale.created_at)} · {money(sale.total)}</li>)}
+                  {profileSales.map((sale) => <li key={sale.id}>{sale.invoice_number} · {dateLabel(sale.created_at)} · {formatProductPrice(sale.total)}</li>)}
                 </ul>
               </>
             ) : <p className="admin-muted">Choose a customer above to view their saved purchase history. New customers are matched by email or phone.</p>}
@@ -281,7 +309,7 @@ export default function SalesDashboard({ products }) {
           <div className="sales-history-card">
             <p className="admin-eyebrow">RECENT INVOICES</p>
             {sales.length ? <ul>{sales.slice(0, 5).map((sale) => (
-              <li key={sale.id}><span>{sale.invoice_number}</span><strong>{sale.customer?.name ?? "Customer"}</strong><em>{dateLabel(sale.created_at)}</em><b>{money(sale.total)}</b></li>
+              <li key={sale.id}><span>{sale.invoice_number}</span><strong>{sale.customer?.name ?? "Customer"}</strong><em>{dateLabel(sale.created_at)}</em><b>{formatProductPrice(sale.total)}</b></li>
             ))}</ul> : <p className="admin-muted">No sales recorded yet.</p>}
           </div>
         </aside>
@@ -332,16 +360,16 @@ function FragmentSaleRow({ sale, expanded, paymentDraft, saving, onToggle, onPay
         <td>{sale.customer?.name ?? "Customer"}</td>
         <td>{sale.source}</td>
         <td>{dateLabel(sale.created_at)}</td>
-        <td>{money(sale.total)}</td>
-        <td>{money(sale.amount_paid)} / {money(pending)}</td>
+        <td>{formatProductPrice(sale.total)}</td>
+        <td>{formatProductPrice(sale.amount_paid)} / {formatProductPrice(pending)}</td>
         <td><span className={`sales-status sales-status-${sale.status.replace(/_/g, "-")}`}>{sale.status.replace(/_/g, " ")}</span></td>
       </tr>
       {expanded && (
         <tr className="sales-expanded-row">
           <td colSpan="7">
             <div className="sales-expanded-content">
-              <div><strong>Items</strong><ul>{(sale.items ?? []).map((item) => <li key={item.id}>{item.product_name} × {item.quantity} · {money(item.line_total)}</li>)}</ul></div>
-              <div><strong>Payment history</strong>{sale.payments?.length ? <ul>{sale.payments.map((payment) => <li key={payment.id}>{dateLabel(payment.paid_at)} · {money(payment.amount)} · {payment.method}{payment.reference ? ` · ${payment.reference}` : ""}</li>)}</ul> : <p className="admin-muted">No payments recorded.</p>}</div>
+              <div><strong>Items</strong><ul>{(sale.items ?? []).map((item) => <li key={item.id}>{item.product_name}{item.variant_label ? ` — ${item.variant_label}` : ""} × {item.quantity} · {formatProductPrice(item.line_total)}</li>)}</ul></div>
+              <div><strong>Payment history</strong>{sale.payments?.length ? <ul>{sale.payments.map((payment) => <li key={payment.id}>{dateLabel(payment.paid_at)} · {formatProductPrice(payment.amount)} · {payment.method}{payment.reference ? ` · ${payment.reference}` : ""}</li>)}</ul> : <p className="admin-muted">No payments recorded.</p>}</div>
               {pending > 0 && <form className="sales-payment-form" onSubmit={onPaymentSubmit}>
                 <label>Record payment<input type="number" min="0.01" max={pending} step="0.01" value={paymentDraft.amount} onChange={(event) => onPaymentChange("amount", event.target.value)} required /></label>
                 <label>Method<select value={paymentDraft.method} onChange={(event) => onPaymentChange("method", event.target.value)}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>

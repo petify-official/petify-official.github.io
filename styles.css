@@ -242,6 +242,7 @@ html {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 320px));
   gap: 1.5rem;
   justify-content: center;
+  align-items: start;
 }
 
 /* Cards */
@@ -401,10 +402,79 @@ html {
   gap: 0.5rem;
 }
 
+.price-box-variants {
+  display: grid;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+.price-box-heading {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.product-variant-prices {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.product-variant-price {
+  min-width: 0;
+  padding: 0.55rem 0.65rem;
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.product-variant-price:has(input:checked) {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+
+.product-variant-price input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.product-variant-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.product-variant-amounts {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.4rem;
+}
+
 .price {
   font-size: 1.5rem;
   font-weight: 800;
   color: var(--primary-dark);
+}
+
+.product-variant-amounts .price {
+  font-size: 1rem;
+  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+
+.product-variant-amounts .old-price {
+  font-size: 0.75rem;
 }
 
 .old-price {
@@ -1348,6 +1418,52 @@ footer a {
   font-weight: 400;
 }
 
+.product-variants-editor {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem;
+  display: grid;
+  gap: 0.9rem;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.product-variants-editor legend {
+  padding: 0 0.35rem;
+  color: var(--text-dark);
+  font-weight: 700;
+}
+
+.product-variants-editor > p {
+  margin: 0;
+}
+
+.product-variant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(120px, 1fr) minmax(120px, 1fr) auto;
+  align-items: end;
+  gap: 0.75rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid #dbe3ea;
+}
+
+.product-variant-row label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.product-variant-row input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-dark);
+  font: inherit;
+}
+
 .admin-upload-progress {
   margin-top: 1.25rem;
   padding: 0.9rem;
@@ -1609,6 +1725,10 @@ footer a {
   }
 
   .admin-visibility-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .product-variant-row {
     grid-template-columns: minmax(0, 1fr);
   }
 

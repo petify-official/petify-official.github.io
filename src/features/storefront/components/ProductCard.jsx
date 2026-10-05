@@ -1,12 +1,25 @@
+import { useState } from "react";
+import { formatProductPrice, productOptions } from "../../../lib/productPricing.js";
 import ProductGallery from "./ProductGallery.jsx";
 
-function OrderLink({ product, whatsappNumber, combo }) {
-  const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(product.defaultWhatsappMsg)}`;
+function OrderLink({ product, whatsappNumber, combo, variant }) {
+  const message = variant?.label
+    ? `${product.defaultWhatsappMsg}\nOption: ${variant.label}\nPrice: ${formatProductPrice(variant.price)}`
+    : product.defaultWhatsappMsg;
+  const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
   return <a href={link} className="btn" target="_blank" rel="noopener noreferrer">{combo ? "Order Combo" : "Order via WhatsApp"}</a>;
 }
 
 export default function ProductCard({ product, whatsappNumber }) {
   const combo = product.type === "combo";
+  const variants = productOptions(product);
+  const [selectedVariantId, setSelectedVariantId] = useState(variants[0]?.id ?? "");
+  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? variants[0];
+  const isVariantProduct = Boolean(product.variants?.length);
+  const displayPrice = isVariantProduct ? formatProductPrice(selectedVariant?.price) : product.price;
+  const displayOldPrice = isVariantProduct
+    ? (selectedVariant?.oldPrice ? formatProductPrice(selectedVariant.oldPrice) : "")
+    : product.oldPrice;
 
   return (
     <article className={`card${combo ? " combo-card" : ""}`}>
@@ -26,13 +39,39 @@ export default function ProductCard({ product, whatsappNumber }) {
           </ul>
         )}
       </div>
-      {product.price && (
-        <div className="price-box">
-          <span className="price">{product.price}</span>
-          {product.oldPrice && <span className="old-price">{product.oldPrice}</span>}
+      {isVariantProduct && (
+        <div className="price-box price-box-variants">
+          <span className="price-box-heading">Available sizes & prices</span>
+          <div className="product-variant-prices" role="radiogroup" aria-label={`${product.title} sizes and prices`}>
+            {variants.map((variant) => (
+              <label className="product-variant-price" key={variant.id}>
+                <input
+                  type="radio"
+                  name={`variant-${product.id}`}
+                  value={variant.id}
+                  checked={variant.id === selectedVariantId}
+                  onChange={() => setSelectedVariantId(variant.id)}
+                  aria-label={`${variant.label}, ${formatProductPrice(variant.price)}`}
+                />
+                <span className="product-variant-label">{variant.label}</span>
+                <span className="product-variant-amounts">
+                  <strong className="price">{formatProductPrice(variant.price)}</strong>
+                  {variant.oldPrice > variant.price && (
+                    <span className="old-price">{formatProductPrice(variant.oldPrice)}</span>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
         </div>
       )}
-      <OrderLink product={product} whatsappNumber={whatsappNumber} combo={combo} />
+      {!isVariantProduct && (displayPrice || displayOldPrice) && (
+        <div className="price-box">
+          <span className="price">{displayPrice}</span>
+          {displayOldPrice && <span className="old-price">{displayOldPrice}</span>}
+        </div>
+      )}
+      <OrderLink product={product} whatsappNumber={whatsappNumber} combo={combo} variant={isVariantProduct ? selectedVariant : null} />
     </article>
   );
 }

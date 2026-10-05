@@ -10,6 +10,7 @@ function mapProduct(row) {
     description: row.description,
     specs: row.specs ?? [],
     images: row.images ?? [],
+    variants: row.variants ?? [],
     saveTag: row.save_tag,
     price: row.price,
     oldPrice: row.old_price,
