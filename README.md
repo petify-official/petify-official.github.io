@@ -14,19 +14,23 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 2. Run `supabase/schema.sql` in the Supabase SQL Editor.
 3. Run `supabase/admin.sql` to create the admin role, product write policies, and public image bucket.
 4. Run `supabase/catalog-sections.sql` to add configurable storefront sections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, and storefront visibility. Rerun this script after updates to apply later additions; it is safe to rerun.
-5. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
-6. In Supabase Authentication, create your account. Do not enable public sign-ups.
-7. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
+5. Run `supabase/sales.sql` to create the cloud-backed admin sales ledger, customer and payment history, unique invoice sequence, and sales settings. Run it after `admin.sql` and `catalog-sections.sql`; it is safe to rerun.
+6. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
+7. In Supabase Authentication, create your account. Do not enable public sign-ups.
+8. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
 
    ```sql
    insert into public.admin_users (user_id)
    values ('YOUR_AUTH_USER_UUID');
    ```
 
-8. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
-9. Visit `/#admin`, sign in with the account you created, and manage products. Create, rename, reorder, or delete empty storefront sections such as Toys or Cages from the Products page. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
+9. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
+10. Visit `/#admin`, sign in with the account you created, and manage products. Create, rename, reorder, or delete empty storefront sections such as Toys or Cages from the Products page. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
+11. Open `/#sales-dashb` (or choose **Sales** in the admin workspace) to create cloud-backed manual sales, invoices, and payment entries. Configure the sales module, invoice prefix, and default payment method in **Site settings → Sales settings**.
 
 Only the public anon key belongs in this frontend. Never put a service-role key in a `VITE_` variable. Visitors can read active products; database and Storage writes require the assigned admin role.
+
+The existing storefront does not currently have a checkout/order database or inventory/stock fields; customer orders are initiated through WhatsApp. The sales workspace therefore records admin-created offline sales only, and does not misrepresent WhatsApp inquiries as completed online orders or adjust nonexistent stock. When online checkout is added, it should write its orders into the same sales ledger or expose a shared order relationship rather than creating a parallel catalog.
 
 ## Future mobile app
 

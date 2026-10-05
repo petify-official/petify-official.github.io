@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import SiteSettingsManager from "./features/admin/SiteSettingsManager.jsx";
+import SalesDashboard from "./features/sales/SalesDashboard.jsx";
 import { supabase } from "./lib/supabase.js";
 import { DEFAULT_ADMIN_BRAND, normalizeAdminBrand } from "./config/siteAppearance.js";
 import {
@@ -293,12 +294,15 @@ function ProductEditor({ product, draft, products, sections, onCancel, onDraftCh
   );
 }
 
-function ProductManager({ session, adminBrand, onAdminBrandChange }) {
+function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
   const [products, setProducts] = useState([]);
   const [sections, setSections] = useState([]);
-  const [workspace, setWorkspace] = useState(() => readAdminWorkspace(session.user.id));
+  const [workspace, setWorkspace] = useState(() => ({
+    ...readAdminWorkspace(session.user.id),
+    ...(initialView ? { activeView: initialView } : {}),
+  }));
   const [persistenceError, setPersistenceError] = useState("");
-  const activeView = workspace.activeView === "site-settings" ? "site-settings" : "products";
+  const activeView = workspace.activeView === "site-settings" ? "site-settings" : workspace.activeView === "sales" ? "sales" : "products";
   const [settingsVisited, setSettingsVisited] = useState(activeView === "site-settings");
   const editorDraft = workspace.editorDraft ?? null;
   const editorProduct = editorDraft?.product ?? null;
@@ -311,6 +315,12 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
+
+  useEffect(() => {
+    if (initialView) {
+      setWorkspace((current) => ({ ...current, activeView: initialView }));
+    }
+  }, [initialView]);
 
   useEffect(() => {
     try {
@@ -481,6 +491,7 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
         <nav className="admin-sidebar" aria-label="Admin pages">
           <p className="admin-eyebrow">WORKSPACE</p>
           <button type="button" className={activeView === "products" ? "active" : ""} aria-current={activeView === "products" ? "page" : undefined} onClick={() => setWorkspace((current) => ({ ...current, activeView: "products" }))}>Products</button>
+          <button type="button" className={activeView === "sales" ? "active" : ""} aria-current={activeView === "sales" ? "page" : undefined} onClick={() => setWorkspace((current) => ({ ...current, activeView: "sales" }))}>Sales</button>
           <button type="button" className={activeView === "site-settings" ? "active" : ""} aria-current={activeView === "site-settings" ? "page" : undefined} onClick={() => {
             setSettingsVisited(true);
             setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
@@ -496,6 +507,9 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
                 <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
               </>
             )}
+          </div>
+          <div hidden={activeView !== "sales"}>
+            <SalesDashboard products={products} />
           </div>
           <div hidden={activeView !== "products"}>
             {editorProduct ? (
@@ -589,7 +603,7 @@ function ProductManager({ session, adminBrand, onAdminBrandChange }) {
   );
 }
 
-export default function AdminDashboard({ adminBrand: initialAdminBrand }) {
+export default function AdminDashboard({ adminBrand: initialAdminBrand, initialView }) {
   const [session, setSession] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -659,5 +673,5 @@ export default function AdminDashboard({ adminBrand: initialAdminBrand }) {
     );
   }
 
-  return <ProductManager session={session} adminBrand={adminBrand} onAdminBrandChange={setAdminBrand} />;
+  return <ProductManager session={session} adminBrand={adminBrand} onAdminBrandChange={setAdminBrand} initialView={initialView} />;
 }

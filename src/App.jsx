@@ -15,11 +15,12 @@ import {
 
 export default function App() {
   const { products, sections, settings, loading, error } = useStorefrontCatalog();
-  const [isAdminRoute, setIsAdminRoute] = useState(window.location.hash === "#admin");
+  const [routeHash, setRouteHash] = useState(window.location.hash);
+  const isAdminRoute = routeHash === "#admin" || routeHash === "#sales-dashb";
   const [showScrollTop, setShowScrollTop] = useState(window.scrollY > 320);
 
   useEffect(() => {
-    const updateRoute = () => setIsAdminRoute(window.location.hash === "#admin");
+    const updateRoute = () => setRouteHash(window.location.hash);
     window.addEventListener("hashchange", updateRoute);
     return () => window.removeEventListener("hashchange", updateRoute);
   }, []);
@@ -75,7 +76,12 @@ export default function App() {
     }
   }
 
-  if (isAdminRoute) return <AdminDashboard adminBrand={settings?.adminBrand} />;
+  if (isAdminRoute) return (
+    <AdminDashboard
+      adminBrand={settings?.adminBrand}
+      initialView={routeHash === "#sales-dashb" ? "sales" : undefined}
+    />
+  );
 
   return (
     <>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import StorefrontContentEditor from "./StorefrontContentEditor.jsx";
 import AppearanceSettingsEditor from "./AppearanceSettingsEditor.jsx";
+import SalesSettings from "../sales/SalesSettings.jsx";
 import {
   getAdminProducts,
   getAdminSections,
@@ -116,6 +117,7 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange }) 
       {notice && <p className="admin-success" role="status">{notice}</p>}
       <StorefrontContentEditor />
       <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
+      <SalesSettings />
       <section className="admin-settings-block" aria-labelledby="admin-logo-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-logo-settings-title">Store logo</h2></div></div>
         <form className="admin-store-logo" onSubmit={submitLogo}>
