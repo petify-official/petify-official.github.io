@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import AdminDashboard from "./AdminDashboard.jsx";
+import { lazy, Suspense, useEffect, useState } from "react";
 import CatalogLoading from "./features/storefront/components/CatalogLoading.jsx";
 import CatalogSections from "./features/storefront/components/CatalogSections.jsx";
 import FeatureList from "./features/storefront/components/FeatureList.jsx";
@@ -12,6 +11,8 @@ import {
   applyColorPalette,
   normalizeLoadingScreen,
 } from "./config/siteAppearance.js";
+
+const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 
 export default function App() {
   const { products, sections, settings, loading, error } = useStorefrontCatalog();
@@ -77,10 +78,12 @@ export default function App() {
   }
 
   if (isAdminRoute) return (
-    <AdminDashboard
-      adminBrand={settings?.adminBrand}
-      initialView={routeHash === "#sales-dashb" ? "sales" : undefined}
-    />
+    <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading admin...</p></div>}>
+      <AdminDashboard
+        adminBrand={settings?.adminBrand}
+        initialView={routeHash === "#sales-dashb" ? "sales" : undefined}
+      />
+    </Suspense>
   );
 
   return (

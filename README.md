@@ -37,6 +37,18 @@ The existing storefront does not currently have a checkout/order database or inv
 
 The React UI is kept separate from catalog access: `src/services/catalog.js` owns the web data source and the database is the shared contract. A future Expo/React Native app can use the same Supabase project, table, policies, and product fields with its own native UI. Move shared data mapping/types into a small shared package if both clients need identical client-side logic.
 
+## Frontend structure
+
+- `src/features/storefront/` contains storefront components and the catalog hook.
+- `src/features/admin/auth/` contains admin sign-in.
+- `src/features/admin/products/` contains product editing and product form utilities.
+- `src/features/admin/` contains admin workspace navigation and site-settings screens.
+- `src/features/sales/` contains sales screens and feature styles.
+- `src/services/` contains Supabase access grouped by catalog, admin, and sales.
+- `src/lib/` contains shared Supabase and product-pricing utilities.
+
+Admin, sign-in, sales, site settings, and product editing are lazy-loaded as separate chunks; storefront users do not need to download the admin workspace.
+
 ## Build
 
 Run `npm run build` for the production bundle and `npm run preview` to inspect it locally.
