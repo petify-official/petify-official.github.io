@@ -201,24 +201,30 @@ export async function saveCatalogSectionOrder(sections) {
 
 export async function updateStoreLogo(file) {
   const [logoUrl] = await uploadProductImages("store-settings", [file]);
+  await saveStoreLogoUrl(logoUrl);
+  return logoUrl;
+}
+
+export async function saveStoreLogoUrl(logoUrl) {
   const { error } = await supabase
     .from("site_settings")
     .update({ logo_url: logoUrl, updated_at: new Date().toISOString() })
     .eq("id", "storefront");
   if (error) throw error;
-
-  return logoUrl;
 }
 
 export async function updateStoreFavicon(file) {
   const [faviconUrl] = await uploadProductImages("store-settings", [file]);
+  await saveStoreFaviconUrl(faviconUrl);
+  return faviconUrl;
+}
+
+export async function saveStoreFaviconUrl(faviconUrl) {
   const { error } = await supabase
     .from("site_settings")
     .update({ favicon_url: faviconUrl, updated_at: new Date().toISOString() })
     .eq("id", "storefront");
   if (error) throw error;
-
-  return faviconUrl;
 }
 
 export async function uploadProductImages(productId, files, onProgress) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   COLOR_PALETTES,
   DEFAULT_COLOR_PALETTE,
@@ -16,6 +16,8 @@ import {
   saveLoadingScreen,
   uploadProductImages,
 } from "../../services/admin.js";
+import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
+import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
 
 const colorFields = [
   ["primary", "Primary"],
@@ -27,7 +29,7 @@ const colorFields = [
   ["card", "Card background"],
 ];
 
-export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChange }) {
+export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChange, userId }) {
   const [palette, setPalette] = useState(DEFAULT_COLOR_PALETTE);
   const [loadingScreen, setLoadingScreen] = useState(DEFAULT_LOADING_SCREEN);
   const [dashboardBrand, setDashboardBrand] = useState(normalizeAdminBrand(adminBrand ?? DEFAULT_ADMIN_BRAND));
@@ -39,6 +41,33 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
   const [savingLoadingScreen, setSavingLoadingScreen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const restoreAdminBrandDraft = useCallback((draft) => setDashboardBrand(draft), []);
+  const restorePaletteDraft = useCallback((draft) => setPalette(draft), []);
+  const restoreLoadingDraft = useCallback((draft) => setLoadingScreen(draft), []);
+  const brandDraft = useWorkspaceDraft({
+    userId,
+    draftType: "site-appearance",
+    draftKey: "dashboard-brand",
+    value: dashboardBrand,
+    onRestore: restoreAdminBrandDraft,
+    ready: !loading,
+  });
+  const paletteDraft = useWorkspaceDraft({
+    userId,
+    draftType: "site-appearance",
+    draftKey: "color-palette",
+    value: palette,
+    onRestore: restorePaletteDraft,
+    ready: !loading,
+  });
+  const loadingDraft = useWorkspaceDraft({
+    userId,
+    draftType: "site-appearance",
+    draftKey: "loading-screen",
+    value: loadingScreen,
+    onRestore: restoreLoadingDraft,
+    ready: !loading,
+  });
 
   useEffect(() => {
     if (!imageFile) {
@@ -84,6 +113,12 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       await saveAdminBrand(nextAdminBrand);
       setDashboardBrand(nextAdminBrand);
       onAdminBrandChange(nextAdminBrand);
+      try {
+        await brandDraft.clear();
+      } catch (clearError) {
+        setError(`Dashboard branding was saved, but its draft could not be removed: ${clearError.message}`);
+        return;
+      }
       setNotice("Dashboard branding saved.");
     } catch (saveError) {
       setError(saveError.message || "Dashboard branding could not be saved.");
@@ -97,7 +132,6 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       ? { ...palette, preset }
       : { preset, colors: COLOR_PALETTES[preset].colors };
     setPalette(nextPalette);
-    applyColorPalette(nextPalette);
     setNotice("");
   }
 
@@ -107,7 +141,6 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       colors: { ...palette.colors, [key]: value },
     };
     setPalette(nextPalette);
-    applyColorPalette(nextPalette);
     setNotice("");
   }
 
@@ -118,6 +151,13 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     setNotice("");
     try {
       await saveColorPalette(palette);
+      applyColorPalette(palette);
+      try {
+        await paletteDraft.clear();
+      } catch (clearError) {
+        setError(`Color palette was saved, but its draft could not be removed: ${clearError.message}`);
+        return;
+      }
       setNotice("Color palette saved.");
     } catch (saveError) {
       setError(saveError.message || "Color palette could not be saved.");
@@ -147,12 +187,29 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       setLoadingScreen(nextLoadingScreen);
       setImageFile(null);
       form.reset();
+      try {
+        await loadingDraft.clear();
+      } catch (clearError) {
+        setError(`Loading screen was saved, but its draft could not be removed: ${clearError.message}`);
+        return;
+      }
       setNotice("Loading screen saved.");
     } catch (saveError) {
       setError(saveError.message || "Loading screen could not be saved.");
     } finally {
       setSavingLoadingScreen(false);
     }
+  }
+
+  async function saveLoadingScreenDraft() {
+    let nextLoadingScreen = loadingScreen;
+    if (imageFile) {
+      const [imageUrl] = await uploadProductImages("drafts", [imageFile]);
+      nextLoadingScreen = { ...loadingScreen, imageUrl };
+      setLoadingScreen(nextLoadingScreen);
+      setImageFile(null);
+    }
+    await loadingDraft.saveNow(nextLoadingScreen);
   }
 
   if (loading) return <p className="admin-muted">Loading appearance settings...</p>;
@@ -169,6 +226,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
         <label>Dashboard name<input value={dashboardBrand.name} onChange={(event) => updateAdminBrand("name", event.target.value)} required /></label>
         <label>Dashboard label<input value={dashboardBrand.label} onChange={(event) => updateAdminBrand("label", event.target.value)} required /></label>
         <div className="admin-form-actions admin-span-two">
+          <WorkspaceDraftControls draft={brandDraft} label="dashboard brand" />
           <button className="admin-primary-button" type="submit" disabled={savingAdminBrand}>{savingAdminBrand ? "Saving..." : "Save dashboard branding"}</button>
         </div>
       </form>
@@ -186,6 +244,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
           ))}
         </fieldset>
         <div className="admin-form-actions admin-span-two">
+          <WorkspaceDraftControls draft={paletteDraft} label="color palette" />
           <button className="admin-primary-button" type="submit" disabled={savingPalette}>{savingPalette ? "Saving..." : "Save color palette"}</button>
         </div>
       </form>
@@ -199,6 +258,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
           <label>Loading image<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
         </div>
         <div className="admin-form-actions admin-span-two">
+          <WorkspaceDraftControls draft={loadingDraft} label="loading screen" onSave={saveLoadingScreenDraft} />
           <button className="admin-primary-button" type="submit" disabled={savingLoadingScreen}>{savingLoadingScreen ? "Saving..." : "Save loading screen"}</button>
         </div>
       </form>

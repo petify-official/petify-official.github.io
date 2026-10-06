@@ -15,6 +15,7 @@ function mapProduct(row) {
     price: row.price,
     oldPrice: row.old_price,
     defaultWhatsappMsg: row.default_whatsapp_msg,
+    isActive: row.is_active,
   };
 }
 

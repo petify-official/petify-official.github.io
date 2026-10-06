@@ -1,6 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { formatProductPrice } from "../../lib/productPricing.js";
+import WorkspaceSidebar from "./WorkspaceSidebar.jsx";
+import AccountMenu from "./AccountMenu.jsx";
+import { createSalesNavigationItem } from "./workspaceNavigation.js";
+import { deleteWorkspaceDraft, getWorkspaceDrafts } from "../../services/workspaceDrafts.js";
+import { clearSessionLifetime } from "../../hooks/sessionLifetime.js";
 import {
   blankProduct,
   asEditableProduct,
@@ -21,20 +26,22 @@ import {
 } from "../../services/admin.js";
 
 const SiteSettingsManager = lazy(() => import("./SiteSettingsManager.jsx"));
-const SalesDashboard = lazy(() => import("../sales/SalesDashboard.jsx"));
 const ProductEditor = lazy(() => import("./products/ProductEditor.jsx"));
 
 export default function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
   const [products, setProducts] = useState([]);
   const [sections, setSections] = useState([]);
-  const [workspace, setWorkspace] = useState(() => ({
-    ...readAdminWorkspace(session.user.id),
-    ...(initialView ? { activeView: initialView } : {}),
-  }));
+  const [productDrafts, setProductDrafts] = useState([]);
+  const [workspace, setWorkspace] = useState(() => {
+    const savedWorkspace = readAdminWorkspace(session.user.id);
+    return {
+      ...savedWorkspace,
+      activeView: initialView === "site-settings" || savedWorkspace.activeView === "site-settings" ? "site-settings" : "products",
+    };
+  });
   const [persistenceError, setPersistenceError] = useState("");
-  const activeView = workspace.activeView === "site-settings" ? "site-settings" : workspace.activeView === "sales" ? "sales" : "products";
+  const activeView = workspace.activeView === "site-settings" ? "site-settings" : "products";
   const [settingsVisited, setSettingsVisited] = useState(activeView === "site-settings");
-  const [salesVisited, setSalesVisited] = useState(activeView === "sales");
   const editorDraft = workspace.editorDraft ?? null;
   const editorProduct = editorDraft?.product ?? null;
   const [addingSection, setAddingSection] = useState(false);
@@ -48,10 +55,9 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
 
   useEffect(() => {
-    if (initialView) {
-      if (initialView === "sales") setSalesVisited(true);
-      if (initialView === "site-settings") setSettingsVisited(true);
-      setWorkspace((current) => ({ ...current, activeView: initialView }));
+    if (initialView === "site-settings") {
+      setSettingsVisited(true);
+      setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
     }
   }, [initialView]);
 
@@ -89,7 +95,32 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     }
   }
 
+  async function refreshProductDrafts() {
+    try {
+      setProductDrafts(await getWorkspaceDrafts(session.user.id, "product"));
+    } catch (draftError) {
+      setError(draftError.message || "Saved product drafts could not be loaded.");
+    }
+  }
+
   useEffect(() => { refreshProducts(); }, []);
+  useEffect(() => { refreshProductDrafts(); }, [session.user.id]);
+
+  function resumeProductDraft(savedDraft) {
+    const savedForm = savedDraft.payload?.form ?? {};
+    const savedProduct = products.find((product) => product.id === savedForm.id);
+    const product = savedProduct
+      ? asEditableProduct(savedProduct)
+      : { ...blankProduct(products.length + 1, sections), ...savedForm };
+    saveEditorDraft({
+      key: savedDraft.draft_key,
+      isEditing: Boolean(savedProduct),
+      product,
+      form: savedForm,
+      images: savedDraft.payload?.images ?? [],
+      pendingPhotoCount: 0,
+    });
+  }
 
   async function addSection(event) {
     event.preventDefault();
@@ -211,6 +242,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   }
 
   async function signOut() {
+    clearSessionLifetime(session);
     await supabase.auth.signOut();
   }
 
@@ -218,22 +250,17 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     <div className="admin-shell">
       <header className="admin-topbar">
         <a className="admin-brand" href="/">{adminBrand.name} <span>{adminBrand.label}</span></a>
-        <div className="admin-user"><span>{session.user.email}</span><button onClick={signOut}>Sign out</button></div>
+        <AccountMenu email={session.user.email} onSignOut={signOut} />
       </header>
       <main className="admin-content">
-        <nav className="admin-sidebar" aria-label="Admin pages">
-          <p className="admin-eyebrow">WORKSPACE</p>
-          <button type="button" className={activeView === "products" ? "active" : ""} aria-current={activeView === "products" ? "page" : undefined} onClick={() => setWorkspace((current) => ({ ...current, activeView: "products" }))}>Products</button>
-          <button type="button" className={activeView === "sales" ? "active" : ""} aria-current={activeView === "sales" ? "page" : undefined} onClick={() => {
-            setSalesVisited(true);
-            setWorkspace((current) => ({ ...current, activeView: "sales" }));
-          }}>Sales</button>
-          <button type="button" className={activeView === "site-settings" ? "active" : ""} aria-current={activeView === "site-settings" ? "page" : undefined} onClick={() => {
+        <WorkspaceSidebar items={[
+          { id: "products", label: "Products", icon: "products", active: activeView === "products", onClick: () => setWorkspace((current) => ({ ...current, activeView: "products" })) },
+          { id: "settings", label: "Site settings", icon: "settings", active: activeView === "site-settings", onClick: () => {
             setSettingsVisited(true);
             setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
-          }}>Site settings</button>
-          <a href="/">View storefront</a>
-        </nav>
+          } },
+          createSalesNavigationItem({ expanded: true }),
+        ]} />
         <div className="admin-page-panel">
           {persistenceError && <p className="admin-error" role="alert">{persistenceError}</p>}
           <div hidden={activeView !== "site-settings"}>
@@ -241,16 +268,9 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               <>
                 <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
                 <Suspense fallback={<p className="admin-muted">Loading site settings...</p>}>
-                  <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} />
+                  <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={session.user.id} />
                 </Suspense>
               </>
-            )}
-          </div>
-          <div hidden={activeView !== "sales"}>
-            {salesVisited && (
-              <Suspense fallback={<p className="admin-muted">Loading sales...</p>}>
-                <SalesDashboard products={products} />
-              </Suspense>
             )}
           </div>
           <div hidden={activeView !== "products"}>
@@ -262,8 +282,10 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                   draft={editorDraft}
                   products={products}
                   sections={sections}
+                  userId={session.user.id}
                   onCancel={() => saveEditorDraft(null)}
                   onDraftChange={saveEditorDraft}
+                  onDraftSaved={refreshProductDrafts}
                   onSave={async ({ closeEditor = true } = {}) => { await refreshProducts(); if (closeEditor) saveEditorDraft(null); }}
                 />
               </Suspense>
@@ -275,10 +297,31 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                   <button className="admin-secondary-button" type="button" onClick={() => setAddingSection((current) => !current)}>New section</button>
                   <button className="admin-primary-button" type="button" disabled={!sections.length} onClick={() => {
                     const product = blankProduct(products.length + 1, sections);
-                    saveEditorDraft({ key: "new", isEditing: false, product, form: product, images: [], pendingPhotoCount: 0 });
+                    saveEditorDraft({ key: `new-${crypto.randomUUID()}`, isEditing: false, product, form: product, images: [], pendingPhotoCount: 0 });
                   }}>Add product</button>
                 </div>
               </div>
+              {productDrafts.length > 0 && (
+                <section className="admin-saved-drafts" aria-label="Saved product drafts">
+                  <h2>Product drafts</h2>
+                  <ul>
+                    {productDrafts.map((savedDraft) => (
+                      <li key={savedDraft.draft_key}>
+                        <span>{savedDraft.payload?.form?.title || "Untitled product"} <small>Saved {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(savedDraft.updated_at))}</small></span>
+                        <button className="admin-secondary-button" type="button" onClick={() => resumeProductDraft(savedDraft)}>Resume draft</button>
+                        <button className="admin-delete-button" type="button" onClick={async () => {
+                          try {
+                            await deleteWorkspaceDraft(session.user.id, "product", savedDraft.draft_key);
+                            await refreshProductDrafts();
+                          } catch (draftError) {
+                            setError(draftError.message || "Product draft could not be deleted.");
+                          }
+                        }}>Discard</button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               {addingSection && (
                 <form className="admin-section-form" onSubmit={addSection}>
                   <label>Section name<input value={sectionTitle} onChange={(event) => setSectionTitle(event.target.value)} placeholder="Toys, Pets, Cages..." required /></label>

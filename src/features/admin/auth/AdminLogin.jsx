@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { supabase } from "../../../lib/supabase.js";
 
-export default function AdminLogin({ adminBrand, onSignedIn }) {
+export default function AdminLogin({
+  adminBrand,
+  onSignedIn,
+  title = "Admin sign in",
+  description = "Sign in with the account you created in Supabase Authentication.",
+  backHref = "/",
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -23,13 +29,13 @@ export default function AdminLogin({ adminBrand, onSignedIn }) {
   return (
     <form className="admin-login" onSubmit={submit}>
       <p className="admin-eyebrow">{`${adminBrand.name} ${adminBrand.label}`}</p>
-      <h1>Admin sign in</h1>
-      <p className="admin-muted">Sign in with the account you created in Supabase Authentication.</p>
+      <h1>{title}</h1>
+      <p className="admin-muted">{description}</p>
       <label>Email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
       <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
       {error && <p className="admin-error" role="alert">{error}</p>}
       <button className="admin-primary-button" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
-      <a className="admin-back-link" href="/">Back to storefront</a>
+      <a className="admin-back-link" href={backHref}>Back to storefront</a>
     </form>
   );
 }

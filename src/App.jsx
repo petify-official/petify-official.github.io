@@ -13,17 +13,28 @@ import {
 } from "./config/siteAppearance.js";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
+const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
 
 export default function App() {
   const { products, sections, settings, loading, error } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
-  const isAdminRoute = routeHash === "#admin" || routeHash === "#sales-dashb";
+  const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
+  const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings";
+  const isSalesPortalRoute = routePath === "/petify-dashboard"
+    || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
   const [showScrollTop, setShowScrollTop] = useState(window.scrollY > 320);
 
   useEffect(() => {
-    const updateRoute = () => setRouteHash(window.location.hash);
+    const updateRoute = () => {
+      setRouteHash(window.location.hash);
+      setRoutePath(window.location.pathname.replace(/\/+$/, "") || "/");
+    };
     window.addEventListener("hashchange", updateRoute);
-    return () => window.removeEventListener("hashchange", updateRoute);
+    window.addEventListener("popstate", updateRoute);
+    return () => {
+      window.removeEventListener("hashchange", updateRoute);
+      window.removeEventListener("popstate", updateRoute);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,11 +88,17 @@ export default function App() {
     }
   }
 
+  if (isSalesPortalRoute) return (
+    <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading Sales portal...</p></div>}>
+      <SalesPortal products={products} adminBrand={settings?.adminBrand} />
+    </Suspense>
+  );
+
   if (isAdminRoute) return (
     <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading admin...</p></div>}>
       <AdminDashboard
         adminBrand={settings?.adminBrand}
-        initialView={routeHash === "#sales-dashb" ? "sales" : undefined}
+        initialView={routeHash === "#admin-settings" ? "site-settings" : undefined}
       />
     </Suspense>
   );

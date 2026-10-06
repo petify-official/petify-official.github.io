@@ -1,6 +1,27 @@
+.sales-portal-shell {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+.sales-portal-shell .admin-content {
+  width: min(1440px, calc(100% - 2rem));
+  min-width: 0;
+  padding: clamp(1rem, 3vw, 2.5rem) 0;
+}
+
 .sales-module {
+  width: 100%;
+  min-width: 0;
   display: grid;
   gap: 1.5rem;
+}
+
+#root:has(.sales-portal-shell) {
+  width: 100%;
+  max-width: none;
+  border-inline: 0;
+  text-align: left;
 }
 
 .sales-summary-grid {
@@ -52,8 +73,30 @@
 }
 
 .sales-form-card {
+  min-width: 0;
   display: grid;
   gap: 1rem;
+}
+
+.sales-draft-actions {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.sales-form-fields {
+  min-width: 0;
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.sales-draft-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
 .sales-form-header {
@@ -116,6 +159,25 @@
 .sales-form-grid textarea {
   min-height: 86px;
   resize: vertical;
+}
+
+.sales-delivery-section {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.sales-delivery-section h3 {
+  margin: 0;
+  color: var(--text-dark);
+  font-size: 1rem;
+}
+
+.sales-field-wide {
+  grid-column: 1 / -1;
 }
 
 .sales-product-row {
@@ -250,6 +312,7 @@
 
 .sales-table-section {
   display: grid;
+  min-width: 0;
   gap: 0.75rem;
 }
 
@@ -294,6 +357,63 @@
   font-weight: 650;
 }
 
+.sales-access-section {
+  max-width: 640px;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.sales-access-section > h3 {
+  margin: 0 0 0.5rem;
+}
+
+.sales-access-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.sales-access-form label {
+  display: grid;
+  flex: 1 1 300px;
+  gap: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.sales-access-form input {
+  min-height: 40px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-dark);
+  font: inherit;
+}
+
+.sales-access-list {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 1rem 0 0;
+  list-style: none;
+}
+
+.sales-access-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
 .sales-invoice-button {
   padding: 0;
   border: 0;
@@ -318,6 +438,25 @@
 .sales-expanded-content ul {
   margin: 0.4rem 0 0;
   padding-left: 1.2rem;
+}
+
+.sales-delivery-summary dl {
+  margin: 0.5rem 0 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.4rem 0.8rem;
+}
+
+.sales-delivery-summary dt {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.sales-delivery-summary dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-dark);
+  overflow-wrap: anywhere;
 }
 
 .sales-payment-form {

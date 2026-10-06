@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { uploadProductImages, saveProduct } from "../../../services/admin.js";
 import { formatProductPrice } from "../../../lib/productPricing.js";
+import useWorkspaceDraft from "../../../hooks/useWorkspaceDraft.js";
 import { parseVariantPrice, slugify } from "./productUtils.js";
 
-export default function ProductEditor({ product, draft, products, sections, onCancel, onDraftChange, onSave }) {
+export default function ProductEditor({ product, draft, products, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
   const [form, setForm] = useState(() => ({
     ...product,
     variants: product.variants ?? [],
@@ -21,6 +22,24 @@ export default function ProductEditor({ product, draft, products, sections, onCa
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const isEditing = draft?.isEditing ?? Boolean(product.id);
+  const cloudDraftKey = draft?.key ?? product.id ?? "new-product";
+  const cloudDraftValue = useMemo(() => ({
+    form,
+    images: imageItems.filter((item) => item.url).map((item) => item.url),
+  }), [form, imageItems]);
+  const restoreProductDraft = useCallback((savedDraft) => {
+    if (savedDraft?.form) setForm((current) => ({ ...current, ...savedDraft.form }));
+    if (Array.isArray(savedDraft?.images)) {
+      setImageItems(savedDraft.images.map((url, index) => ({ id: `cloud-${index}`, url })));
+    }
+  }, []);
+  const productDraft = useWorkspaceDraft({
+    userId,
+    draftType: "product",
+    draftKey: cloudDraftKey,
+    value: cloudDraftValue,
+    onRestore: restoreProductDraft,
+  });
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -167,13 +186,63 @@ export default function ProductEditor({ product, draft, products, sections, onCa
         variants,
         displayOrder: Number(form.displayOrder) || 0,
       });
+      let draftRemovalError = null;
+      try {
+        await productDraft.clear();
+      } catch (clearError) {
+        draftRemovalError = clearError;
+      }
       setUploadProgress({ message: "Product saved", percent: 100 });
+      await onDraftSaved?.();
       await onSave();
+      if (draftRemovalError) {
+        setError(`Product was published, but its saved draft could not be removed: ${draftRemovalError.message}`);
+      }
     } catch (saveError) {
       setUploadProgress(null);
       setError(saveError.message || "The product could not be saved.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveProductDraft() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const queuedFiles = imageItems.filter((item) => item.file);
+      const uploadedImages = queuedFiles.length
+        ? await uploadProductImages("drafts", queuedFiles.map((item) => item.file))
+        : [];
+      let uploadedIndex = 0;
+      const images = imageItems.map((item) => item.file ? uploadedImages[uploadedIndex++] : item.url).filter(Boolean);
+      const savedDraft = { form, images };
+      await productDraft.saveNow(savedDraft);
+      setImageItems(images.map((url, index) => ({ id: `draft-${index}`, url })));
+      await onDraftSaved?.();
+      setNotice("Product draft saved to your account. It is not published to the storefront.");
+      return true;
+    } catch (draftError) {
+      setError(draftError.message || "Product draft could not be saved.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function closeEditor() {
+    if (!productDraft.loaded) return;
+    if (await saveProductDraft()) onCancel();
+  }
+
+  async function discardProductDraft() {
+    if (!window.confirm("Discard this saved product draft?")) return;
+    try {
+      await productDraft.clear();
+      setNotice("Saved product draft discarded.");
+    } catch (draftError) {
+      setError(draftError.message || "Product draft could not be discarded.");
     }
   }
 
@@ -184,14 +253,16 @@ export default function ProductEditor({ product, draft, products, sections, onCa
           <p className="admin-eyebrow">{isEditing ? "EDIT PRODUCT" : "NEW PRODUCT"}</p>
           <h2>{isEditing ? form.title : "Add a product"}</h2>
         </div>
-        <button className="admin-secondary-button" type="button" onClick={onCancel}>Close</button>
+        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>Save draft and close</button>
       </div>
       {recoveredPhotoCount > 0 && (
         <p className="admin-muted" role="status">
           Your product draft was restored, but {recoveredPhotoCount} newly selected {recoveredPhotoCount === 1 ? "photo was" : "photos were"} not retained by the browser. Please select {recoveredPhotoCount === 1 ? "it" : "them"} again before saving.
         </p>
       )}
-      <div className="admin-form-grid">
+      {productDraft.error && <p className="admin-error" role="alert">{productDraft.error}</p>}
+      {productDraft.restored && <p className="admin-success" role="status">Saved product draft restored. Storefront changes remain unpublished until you publish this product.</p>}
+      <fieldset className="admin-form-grid admin-editor-fields" disabled={!productDraft.loaded || busy}>
         <label>Store section
           <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)} required>
             {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
@@ -274,7 +345,7 @@ export default function ProductEditor({ product, draft, products, sections, onCa
           </div>
         )}
         <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={form.isActive} onChange={(event) => update("isActive", event.target.checked)} /> Visible in the storefront</label>
-      </div>
+      </fieldset>
       {error && <p className="admin-error" role="alert">{error}</p>}
       {notice && <p className="admin-success" role="status">{notice}</p>}
       {uploadProgress && (
@@ -287,8 +358,10 @@ export default function ProductEditor({ product, draft, products, sections, onCa
         </div>
       )}
       <div className="admin-form-actions">
-        <button className="admin-primary-button" type="submit" disabled={busy}>{busy ? "Saving product..." : "Save product"}</button>
-        <button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button>
+        <button className="admin-secondary-button" type="button" onClick={saveProductDraft} disabled={busy || !productDraft.loaded}>{productDraft.saving ? "Saving draft..." : "Save as draft"}</button>
+        {productDraft.restored && <button className="admin-secondary-button" type="button" onClick={discardProductDraft} disabled={busy || !productDraft.loaded}>Discard draft</button>}
+        <button className="admin-primary-button" type="submit" disabled={busy || !productDraft.loaded}>{busy ? "Saving product..." : "Publish product"}</button>
+        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>Save draft and close</button>
       </div>
     </form>
   );

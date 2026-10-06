@@ -47,6 +47,32 @@ export async function saveSalesSettings(settings) {
   if (error) throw error;
 }
 
+export async function getSalesUsers() {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("sales_users")
+    .select("user_id, created_at")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function addSalesUser(userId) {
+  const client = requireSupabase();
+  const normalizedId = userId.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedId)) {
+    throw new Error("Enter a valid Supabase Auth user UUID.");
+  }
+  const { error } = await client.from("sales_users").insert({ user_id: normalizedId });
+  if (error) throw error;
+}
+
+export async function removeSalesUser(userId) {
+  const client = requireSupabase();
+  const { error } = await client.from("sales_users").delete().eq("user_id", userId);
+  if (error) throw error;
+}
+
 export async function getSales() {
   const client = requireSupabase();
   const { data, error } = await client
@@ -73,6 +99,12 @@ export async function createManualSale(sale) {
     p_paid_amount: sale.paidAmount,
     p_payment_method: sale.paymentMethod,
     p_notes: sale.notes || null,
+    p_source: sale.source,
+    p_delivery_address: sale.deliveryAddress || null,
+    p_delivery_partner: sale.deliveryPartner || null,
+    p_tracking_reference: sale.trackingReference || null,
+    p_delivery_charge: sale.deliveryCharge,
+    p_delivery_status: sale.deliveryStatus,
   });
   if (error) throw error;
   return data;
@@ -88,4 +120,22 @@ export async function recordSalePayment(payment) {
     p_notes: payment.notes || null,
   });
   if (error) throw error;
+}
+
+export async function updateSaleDelivery(delivery) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from("sales")
+    .update({
+      delivery_partner: delivery.deliveryPartner || null,
+      tracking_reference: delivery.trackingReference || null,
+      delivery_status: delivery.deliveryStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", delivery.saleId)
+    .eq("source", "online")
+    .select("id")
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("Online sale was not found.");
 }

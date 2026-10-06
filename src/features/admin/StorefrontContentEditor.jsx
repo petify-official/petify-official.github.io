@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getStorefrontContent, saveStorefrontContent } from "../../services/admin.js";
+import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
+import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
 
 const visibilityOptions = [
   ["brand", "Brand logo"],
@@ -13,12 +15,21 @@ const visibilityOptions = [
   ["footer_disclaimer", "Store disclaimer"],
 ];
 
-export default function StorefrontContentEditor() {
+export default function StorefrontContentEditor({ userId }) {
   const [content, setContent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const restoreContentDraft = useCallback((draft) => setContent(draft), []);
+  const contentDraft = useWorkspaceDraft({
+    userId,
+    draftType: "site-content",
+    draftKey: "storefront",
+    value: content,
+    onRestore: restoreContentDraft,
+    ready: !loading && content !== null,
+  });
 
   useEffect(() => {
     let active = true;
@@ -62,6 +73,12 @@ export default function StorefrontContentEditor() {
     setNotice("");
     try {
       await saveStorefrontContent(content);
+      try {
+        await contentDraft.clear();
+      } catch (clearError) {
+        setError(`Storefront content was saved, but its draft could not be removed: ${clearError.message}`);
+        return;
+      }
       setNotice("Storefront content saved.");
     } catch (saveError) {
       setError(saveError.message || "Storefront content could not be saved.");
@@ -116,6 +133,7 @@ export default function StorefrontContentEditor() {
           {error && <p className="admin-error admin-span-two" role="alert">{error}</p>}
           {notice && <p className="admin-success admin-span-two" role="status">{notice}</p>}
           <div className="admin-form-actions admin-span-two">
+            <WorkspaceDraftControls draft={contentDraft} label="store content" />
             <button className="admin-primary-button" type="submit" disabled={saving}>{saving ? "Saving content..." : "Save store content"}</button>
           </div>
         </form>
