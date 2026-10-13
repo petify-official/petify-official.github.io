@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { formatProductPrice } from "../../lib/productPricing.js";
 import WorkspaceSidebar from "./WorkspaceSidebar.jsx";
@@ -31,9 +31,11 @@ function loadSiteSettingsManager() {
 
 const SiteSettingsManager = lazy(loadSiteSettingsManager);
 const ProductEditor = lazy(() => import("./products/ProductEditor.jsx"));
+const draftDateFormatter = new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
 export default function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
   const [products, setProducts] = useState([]);
+  const [productQuery, setProductQuery] = useState("");
   const [sections, setSections] = useState([]);
   const [productDrafts, setProductDrafts] = useState([]);
   const [workspace, setWorkspace] = useState(() => {
@@ -55,8 +57,20 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const [editingSectionId, setEditingSectionId] = useState("");
   const [editingSectionTitle, setEditingSectionTitle] = useState("");
   const [loading, setLoading] = useState(true);
+  const [productsLoadError, setProductsLoadError] = useState("");
   const [error, setError] = useState("");
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
+  const productSearchTerm = productQuery.trim().toLowerCase();
+  const sectionTitles = useMemo(() => new Map(sections.map((section) => [section.id, section.title])), [sections]);
+  const filteredProducts = useMemo(() => (
+    productSearchTerm
+      ? products.filter((product) => (
+        `${product.title} ${product.id} ${sectionTitles.get(product.sectionId) ?? ""}`
+          .toLowerCase()
+          .includes(productSearchTerm)
+      ))
+      : products
+  ), [products, productSearchTerm, sectionTitles]);
 
   useEffect(() => {
     if (initialView) {
@@ -100,13 +114,17 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   }, []);
 
   async function refreshProducts() {
+    setLoading(true);
     setError("");
     try {
       const [nextProducts, nextSections] = await Promise.all([getAdminProducts(), getAdminSections()]);
       setProducts(nextProducts);
       setSections(nextSections);
+      setProductsLoadError("");
     } catch (loadError) {
-      setError(loadError.message || "Products could not be loaded.");
+      const message = loadError.message || "Products could not be loaded.";
+      setProductsLoadError(message);
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -313,24 +331,28 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
             ) : (
               <>
               <div className="admin-page-heading">
-                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Manage products and their storefront sections.</p></div>
+                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Manage products, catalog sections, and what customers see in your store.</p></div>
                 <div className="admin-heading-actions">
                   <button className="admin-secondary-button" type="button" onClick={() => setAddingSection((current) => !current)}>New section</button>
                   <button className="admin-primary-button" type="button" disabled={!sections.length} onClick={() => {
                     const product = blankProduct(products.length + 1, sections);
                     saveEditorDraft({ key: `new-${crypto.randomUUID()}`, isEditing: false, product, form: product, images: [], pendingPhotoCount: 0 });
-                  }}>Add product</button>
+                  }} title={!sections.length ? "Create a catalog section before adding a product" : undefined}>Add product</button>
                 </div>
               </div>
+              {!sections.length && !loading && (
+                <p className="admin-product-setup-note" role="status">Create your first catalog section to start adding products. Use <strong>New section</strong> above.</p>
+              )}
               {productDrafts.length > 0 && (
                 <section className="admin-saved-drafts" aria-label="Saved product drafts">
                   <h2>Product drafts</h2>
                   <ul>
                     {productDrafts.map((savedDraft) => (
                       <li key={savedDraft.draft_key}>
-                        <span>{savedDraft.payload?.form?.title || "Untitled product"} <small>Saved {new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(savedDraft.updated_at))}</small></span>
+                        <span>{savedDraft.payload?.form?.title || "Untitled product"} <small>Saved {draftDateFormatter.format(new Date(savedDraft.updated_at))}</small></span>
                         <button className="admin-secondary-button" type="button" onClick={() => resumeProductDraft(savedDraft)}>Resume draft</button>
                         <button className="admin-delete-button" type="button" onClick={async () => {
+                          if (!window.confirm(`Discard the draft for ${savedDraft.payload?.form?.title || "this product"}? This cannot be undone.`)) return;
                           try {
                             await deleteWorkspaceDraft(session.user.id, "product", savedDraft.draft_key);
                             await refreshProductDrafts();
@@ -352,7 +374,10 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               )}
               {sections.length > 0 && (
                 <section className="admin-section-order" aria-labelledby="admin-section-order-title">
-                  <h2 id="admin-section-order-title">Catalog sections</h2>
+                  <div className="admin-section-order-heading">
+                    <div><h2 id="admin-section-order-title">Catalog sections</h2><p>Control the storefront order and visibility of your categories.</p></div>
+                    <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
+                  </div>
                   <ol>
                     {sections.map((section, index) => (
                       <li key={section.id}>
@@ -380,27 +405,46 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                 </section>
               )}
               {error && <p className="admin-error" role="alert">{error}</p>}
-              {loading ? <p className="admin-muted">Loading products...</p> : (
-                <div className="admin-table-wrap">
-                  <table className="admin-table">
-                    <thead><tr><th>Product</th><th>Section</th><th>Price / varieties</th><th>Visibility</th><th>Actions</th></tr></thead>
-                    <tbody>
-                      {products.map((product) => (
+              {loading ? <p className="admin-muted">Loading products...</p> : productsLoadError ? (
+                <div className="admin-products-load-error">
+                  <p className="admin-error" role="alert">{productsLoadError}</p>
+                  <button className="admin-secondary-button" type="button" onClick={refreshProducts}>Try loading again</button>
+                </div>
+              ) : (
+                <>
+                  <div className="admin-products-toolbar">
+                    <div>
+                      <h2>Products <span>{products.length}</span></h2>
+                      <p>{productSearchTerm ? `Showing ${filteredProducts.length} of ${products.length} products.` : "Search and manage the items in your storefront."}</p>
+                    </div>
+                    <div className="admin-product-search">
+                      <label className="admin-visually-hidden" htmlFor="admin-product-search">Search products</label>
+                      <input id="admin-product-search" type="search" value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Search name, ID, or section" />
+                      {productQuery && <button type="button" aria-label="Clear product search" onClick={() => setProductQuery("")}>Clear</button>}
+                    </div>
+                  </div>
+                  <div className="admin-table-wrap">
+                    <table className="admin-table">
+                      <caption className="admin-visually-hidden">Product catalog and management actions</caption>
+                      <thead><tr><th>Product</th><th>Section</th><th>Price / varieties</th><th>Visibility</th><th>Actions</th></tr></thead>
+                      <tbody>
+                      {filteredProducts.map((product) => (
                         <tr key={product.id}>
-                          <td><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title}</strong><span>{product.id}</span></div></div></td>
-                          <td>{sections.find((section) => section.id === product.sectionId)?.title || "Unassigned"}</td>
-                          <td>{productPriceLabel(product)}</td>
-                          <td><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
-                          <td><div className="admin-row-actions"><button type="button" onClick={() => {
+                          <td data-label="Product"><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" loading="lazy" decoding="async" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title}</strong><span>{product.id}</span></div></div></td>
+                          <td data-label="Section">{sectionTitles.get(product.sectionId) || "Unassigned"}</td>
+                          <td data-label="Price / varieties">{productPriceLabel(product)}</td>
+                          <td data-label="Visibility"><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
+                          <td data-label="Actions"><div className="admin-row-actions"><button type="button" onClick={() => {
                             const editableProduct = asEditableProduct(product);
                             saveEditorDraft({ key: editableProduct.id, isEditing: true, product: editableProduct, form: editableProduct, images: editableProduct.images ?? [], pendingPhotoCount: 0 });
                           }}>Edit</button><button className="admin-delete-button" type="button" onClick={() => removeProduct(product)}>Delete</button></div></td>
                         </tr>
                       ))}
-                      {!products.length && <tr><td colSpan="5" className="admin-empty">No products yet. Add your first product to begin.</td></tr>}
-                    </tbody>
-                  </table>
-                </div>
+                      {!filteredProducts.length && <tr><td colSpan="5" className="admin-empty">{products.length ? "No products match that search. Try another name, ID, or section." : "No products yet. Add your first product to begin."}</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
               </>
             )}

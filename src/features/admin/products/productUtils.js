@@ -43,6 +43,11 @@ export function parseVariantPrice(value) {
   return Number(normalized.replace(/,/g, ""));
 }
 
+export function resolveProductImageUrls(imageItems, uploadedUrls) {
+  let uploadedIndex = 0;
+  return imageItems.map((item) => item.file ? uploadedUrls[uploadedIndex++] : item.url);
+}
+
 export function productPriceLabel(product) {
   if (!product.variants?.length) return product.price || "—";
   const prices = product.variants.map((variant) => Number(variant.price));

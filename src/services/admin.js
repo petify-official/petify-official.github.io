@@ -228,24 +228,40 @@ export async function saveStoreFaviconUrl(faviconUrl) {
 }
 
 export async function uploadProductImages(productId, files, onProgress) {
-  const uploadedUrls = [];
+  const uploadedUrls = new Array(files.length);
+  const workerCount = Math.min(files.length, 3);
+  let nextIndex = 0;
+  let completed = 0;
+  let uploadError = null;
 
-  for (const [index, file] of files.entries()) {
-    onProgress?.({ completed: index, total: files.length, fileName: file.name });
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
-    const filePath = `${productId}/${crypto.randomUUID()}-${safeName}`;
-    const { error } = await supabase.storage.from(imageBucket).upload(filePath, file, {
-      contentType: file.type,
-      upsert: false,
-    });
-    if (error?.message === "Bucket not found") {
-      throw new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/admin.sql in the Supabase SQL Editor, then try again.`);
+  async function uploadNext() {
+    while (nextIndex < files.length && !uploadError) {
+      const index = nextIndex++;
+      const file = files[index];
+      onProgress?.({ completed, total: files.length, fileName: file.name });
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+      const filePath = `${productId}/${crypto.randomUUID()}-${safeName}`;
+      const { error } = await supabase.storage.from(imageBucket).upload(filePath, file, {
+        contentType: file.type,
+        upsert: false,
+      });
+      if (error?.message === "Bucket not found") {
+        uploadError = new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/admin.sql in the Supabase SQL Editor, then try again.`);
+        break;
+      }
+      if (error) {
+        uploadError = error;
+        break;
+      }
+
+      uploadedUrls[index] = supabase.storage.from(imageBucket).getPublicUrl(filePath).data.publicUrl;
+      completed += 1;
+      onProgress?.({ completed, total: files.length, fileName: "" });
     }
-    if (error) throw error;
-
-    uploadedUrls.push(supabase.storage.from(imageBucket).getPublicUrl(filePath).data.publicUrl);
-    onProgress?.({ completed: index + 1, total: files.length, fileName: "" });
   }
+
+  await Promise.all(Array.from({ length: workerCount }, () => uploadNext()));
+  if (uploadError) throw uploadError;
 
   return uploadedUrls;
 }
