@@ -420,7 +420,7 @@ export default function ProductEditor({ product, draft, products, sections, user
         </div>
       )}
       <div className="admin-form-actions">
-        <button className="admin-secondary-button" type="button" onClick={clearAllData} disabled={busy || !productDraft.loaded}>Clear all data</button>
+        <button className="admin-secondary-button" type="button" onClick={clearAllData} disabled={busy || !productDraft.loaded}>Reset</button>
         <button className="admin-secondary-button" type="button" onClick={discardProductDraft} disabled={busy || !productDraft.loaded}>Discard product</button>
         <button className="admin-primary-button" type="submit" disabled={busy || !productDraft.loaded}>{busy ? "Saving product..." : "Publish product"}</button>
         <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>{productDraft.saving ? "Saving draft..." : "Save as draft"}</button>
