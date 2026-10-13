@@ -755,6 +755,13 @@ footer a {
   background: var(--bg-light);
 }
 
+#root:has(.admin-shell) {
+  width: 100%;
+  max-width: none;
+  border-inline: 0;
+  text-align: left;
+}
+
 .admin-topbar {
   min-height: 64px;
   padding: 0 5vw;
@@ -938,9 +945,9 @@ footer a {
 }
 
 .admin-content {
-  width: min(1180px, calc(100% - 2rem));
+  width: min(1440px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 3rem 0;
+  padding: clamp(1rem, 3vw, 2.5rem) 0;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   align-items: start;

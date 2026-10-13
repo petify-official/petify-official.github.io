@@ -4,18 +4,37 @@ import { formatProductPrice } from "../../../lib/productPricing.js";
 import useWorkspaceDraft from "../../../hooks/useWorkspaceDraft.js";
 import { parseVariantPrice, slugify } from "./productUtils.js";
 
+const defaultOrderMessagePrefix = "Hi Petify, I want to order ";
+
+function isDefaultOrderMessage(message, title) {
+  if (!message) return true;
+  if (message === `${defaultOrderMessagePrefix}${title}`) return true;
+  if (!message.startsWith(defaultOrderMessagePrefix)) return false;
+  return title.startsWith(message.slice(defaultOrderMessagePrefix.length));
+}
+
 export default function ProductEditor({ product, draft, products, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
+  const initialProductState = useRef(null);
+  if (!initialProductState.current) {
+    initialProductState.current = {
+      form: {
+        ...product,
+        variants: product.variants ?? [],
+        variantsEnabled: Boolean(product.variants?.length),
+      },
+      images: product.images ?? [],
+    };
+  }
+  const { form: initialForm, images: initialImages } = initialProductState.current;
   const [form, setForm] = useState(() => ({
-    ...product,
-    variants: product.variants ?? [],
-    variantsEnabled: Boolean(product.variants?.length),
+    ...initialForm,
     ...(draft?.form ?? {}),
   }));
   const [productIdCustomized, setProductIdCustomized] = useState(() => (
     !product.id && Boolean(draft?.form?.id) && draft.form.id !== slugify(draft.form.title)
   ));
   const [imageItems, setImageItems] = useState(() => (draft?.images ?? product.images ?? []).map((url, index) => ({ id: `existing-${index}`, url })));
-  const [recoveredPhotoCount] = useState(() => draft?.pendingPhotoCount ?? 0);
+  const [recoveredPhotoCount, setRecoveredPhotoCount] = useState(() => draft?.pendingPhotoCount ?? 0);
   const previewUrls = useRef(new Set());
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
@@ -33,12 +52,33 @@ export default function ProductEditor({ product, draft, products, sections, user
       setImageItems(savedDraft.images.map((url, index) => ({ id: `cloud-${index}`, url })));
     }
   }, []);
+  const shouldSaveProductDraft = useCallback((value) => (
+    isEditing
+      ? JSON.stringify(value.form) !== JSON.stringify(initialForm)
+        || JSON.stringify(value.images) !== JSON.stringify(initialImages)
+      : Boolean(
+      value.form.title?.trim()
+      || value.form.description?.trim()
+      || value.form.badge?.trim()
+      || value.form.specsText?.trim()
+      || value.form.defaultWhatsappMsg?.trim()
+      || value.form.price
+      || value.form.oldPrice
+      || value.form.saveTag?.trim()
+      || value.form.type !== "single"
+      || value.form.variantsEnabled
+      || value.form.variants?.some((variant) => variant.label?.trim() || variant.price || variant.oldPrice)
+      || value.images.length
+      || !value.form.isActive
+      )
+  ), [initialForm, initialImages, isEditing]);
   const productDraft = useWorkspaceDraft({
     userId,
     draftType: "product",
     draftKey: cloudDraftKey,
     value: cloudDraftValue,
     onRestore: restoreProductDraft,
+    shouldSave: shouldSaveProductDraft,
   });
 
   useEffect(() => () => {
@@ -110,7 +150,9 @@ export default function ProductEditor({ product, draft, products, sections, user
       ...current,
       title,
       id: isEditing || productIdCustomized ? current.id : slugify(title),
-      defaultWhatsappMsg: current.defaultWhatsappMsg || `Hi Petify, I want to order ${title}`,
+      defaultWhatsappMsg: isDefaultOrderMessage(current.defaultWhatsappMsg, current.title)
+        ? `${defaultOrderMessagePrefix}${title}`
+        : current.defaultWhatsappMsg,
     }));
   }
 
@@ -237,12 +279,33 @@ export default function ProductEditor({ product, draft, products, sections, user
   }
 
   async function discardProductDraft() {
-    if (!window.confirm("Discard this saved product draft?")) return;
+    if (!window.confirm("Discard this product draft?")) return;
     try {
       await productDraft.clear();
-      setNotice("Saved product draft discarded.");
+      await onDraftSaved?.();
+      onCancel();
     } catch (draftError) {
       setError(draftError.message || "Product draft could not be discarded.");
+    }
+  }
+
+  async function clearAllData() {
+    if (!window.confirm("Clear all unsaved product data and restore the starting values?")) return;
+    try {
+      await productDraft.clear();
+      imageItems.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      });
+      previewUrls.current.clear();
+      setForm(initialForm);
+      setImageItems(initialImages.map((url, index) => ({ id: `existing-${index}`, url })));
+      setRecoveredPhotoCount(0);
+      setProductIdCustomized(false);
+      setError("");
+      setNotice("Unsaved product data cleared.");
+      await onDraftSaved?.();
+    } catch (clearError) {
+      setError(clearError.message || "Product data could not be cleared.");
     }
   }
 
@@ -253,7 +316,6 @@ export default function ProductEditor({ product, draft, products, sections, user
           <p className="admin-eyebrow">{isEditing ? "EDIT PRODUCT" : "NEW PRODUCT"}</p>
           <h2>{isEditing ? form.title : "Add a product"}</h2>
         </div>
-        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>Save draft and close</button>
       </div>
       {recoveredPhotoCount > 0 && (
         <p className="admin-muted" role="status">
@@ -358,10 +420,10 @@ export default function ProductEditor({ product, draft, products, sections, user
         </div>
       )}
       <div className="admin-form-actions">
-        <button className="admin-secondary-button" type="button" onClick={saveProductDraft} disabled={busy || !productDraft.loaded}>{productDraft.saving ? "Saving draft..." : "Save as draft"}</button>
-        {productDraft.restored && <button className="admin-secondary-button" type="button" onClick={discardProductDraft} disabled={busy || !productDraft.loaded}>Discard draft</button>}
+        <button className="admin-secondary-button" type="button" onClick={clearAllData} disabled={busy || !productDraft.loaded}>Clear all data</button>
+        <button className="admin-secondary-button" type="button" onClick={discardProductDraft} disabled={busy || !productDraft.loaded}>Discard product</button>
         <button className="admin-primary-button" type="submit" disabled={busy || !productDraft.loaded}>{busy ? "Saving product..." : "Publish product"}</button>
-        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>Save draft and close</button>
+        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>{productDraft.saving ? "Saving draft..." : "Save as draft"}</button>
       </div>
     </form>
   );

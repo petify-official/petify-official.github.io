@@ -3,8 +3,6 @@ import StorefrontContentEditor from "./StorefrontContentEditor.jsx";
 import AppearanceSettingsEditor from "./AppearanceSettingsEditor.jsx";
 import SalesSettings from "../sales/SalesSettings.jsx";
 import {
-  getAdminProducts,
-  getAdminSections,
   getStoreFavicon,
   getHeroPills,
   getStoreLogo,
@@ -18,12 +16,10 @@ import {
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
 
-export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId }) {
+export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, sections, products }) {
   const [storeLogo, setStoreLogo] = useState("");
   const [storeFavicon, setStoreFavicon] = useState("");
   const [heroPills, setHeroPills] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [products, setProducts] = useState([]);
   const [logoFile, setLogoFile] = useState(null);
   const [faviconFile, setFaviconFile] = useState(null);
   const [savingLogo, setSavingLogo] = useState(false);
@@ -62,13 +58,11 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
 
   useEffect(() => {
     let active = true;
-    Promise.all([getStoreLogo(), getStoreFavicon(), getHeroPills(), getAdminSections(), getAdminProducts()]).then(([logo, favicon, pills, nextSections, nextProducts]) => {
+    Promise.all([getStoreLogo(), getStoreFavicon(), getHeroPills()]).then(([logo, favicon, pills]) => {
       if (!active) return;
       setStoreLogo(logo);
       setStoreFavicon(favicon);
       setHeroPills(pills);
-      setSections(nextSections);
-      setProducts(nextProducts);
     }).catch((loadError) => {
       if (active) setError(loadError.message || "Site settings could not be loaded.");
     }).finally(() => {

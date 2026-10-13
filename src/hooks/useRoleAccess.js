@@ -21,7 +21,7 @@ function writeCachedRoles(userId, roles) {
 
 export default function useRoleAccess(session, roleTable) {
   const userId = session?.user?.id ?? "";
-  const roleQueryKey = roleTable.map((role) => `${role.name}:${role.table}`).join("|");
+  const roleQueryKey = JSON.stringify(roleTable);
   const [roleState, setRoleState] = useState(() => ({
     userId,
     roles: userId ? readCachedRoles(userId) ?? {} : {},
@@ -50,8 +50,8 @@ export default function useRoleAccess(session, roleTable) {
 
     async function checkRoles() {
       try {
-        const results = await Promise.all(roleQueryKey.split("|").map(async (entry) => {
-          const [name, table] = entry.split(":");
+        const rolesToCheck = JSON.parse(roleQueryKey);
+        async function checkRole({ name, table }) {
           const { data, error: roleError } = await supabase
             .from(table)
             .select("user_id")
@@ -59,9 +59,26 @@ export default function useRoleAccess(session, roleTable) {
             .maybeSingle();
           if (roleError) throw roleError;
           return [name, Boolean(data)];
-        }));
+        }
+
+        const independentRoles = rolesToCheck.filter((role) => !role.impliedBy);
+        const independentResults = await Promise.all(independentRoles.map(checkRole));
+        const independentAccess = Object.fromEntries(independentResults);
+        const impliedRoles = rolesToCheck.filter((role) => role.impliedBy);
+        const inheritedResults = impliedRoles
+          .filter((role) => independentAccess[role.impliedBy])
+          .map((role) => [role.name, true]);
+        const additionalResults = await Promise.all(
+          impliedRoles
+            .filter((role) => !independentAccess[role.impliedBy])
+            .map(checkRole),
+        );
         if (!active) return;
-        const nextRoles = Object.fromEntries(results);
+        const nextRoles = Object.fromEntries([
+          ...independentResults,
+          ...inheritedResults,
+          ...additionalResults,
+        ]);
         setRoleState({ userId, roles: nextRoles });
         writeCachedRoles(userId, nextRoles);
         setError("");

@@ -19,7 +19,7 @@ export default function App() {
   const { products, sections, settings, loading, error } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
-  const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings";
+  const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings" || routeHash === "#admin-products";
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
   const [showScrollTop, setShowScrollTop] = useState(window.scrollY > 320);
@@ -98,7 +98,11 @@ export default function App() {
     <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading admin...</p></div>}>
       <AdminDashboard
         adminBrand={settings?.adminBrand}
-        initialView={routeHash === "#admin-settings" ? "site-settings" : undefined}
+        initialView={
+          routeHash === "#admin-settings"
+            ? "site-settings"
+            : routeHash === "#admin-products" ? "products" : undefined
+        }
       />
     </Suspense>
   );

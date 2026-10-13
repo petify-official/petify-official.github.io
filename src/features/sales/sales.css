@@ -5,9 +5,7 @@
 }
 
 .sales-portal-shell .admin-content {
-  width: min(1440px, calc(100% - 2rem));
   min-width: 0;
-  padding: clamp(1rem, 3vw, 2.5rem) 0;
 }
 
 .sales-module {
@@ -15,13 +13,6 @@
   min-width: 0;
   display: grid;
   gap: 1.5rem;
-}
-
-#root:has(.sales-portal-shell) {
-  width: 100%;
-  max-width: none;
-  border-inline: 0;
-  text-align: left;
 }
 
 .sales-summary-grid {

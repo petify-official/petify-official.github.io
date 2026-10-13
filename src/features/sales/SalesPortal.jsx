@@ -16,7 +16,7 @@ import {
 
 const salesRoleTables = [
   { name: "admin", table: "admin_users" },
-  { name: "sales", table: "sales_users" },
+  { name: "sales", table: "sales_users", impliedBy: "admin" },
 ];
 
 export default function SalesPortal({ products, adminBrand: initialAdminBrand }) {
@@ -87,6 +87,10 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
       const sectionId = window.location.hash.slice("#petify-dashboard/".length);
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => {
+        if (sectionId === "sales-dashboard") {
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
         document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
@@ -163,7 +167,7 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
       </header>
       <main className="admin-content">
         <WorkspaceSidebar heading="SALES" items={[
-          ...(isAdmin ? [{ id: "products", label: "Products", icon: "products", href: "/#admin" }] : []),
+          ...(isAdmin ? [{ id: "products", label: "Products", icon: "products", href: "/#admin-products" }] : []),
           ...(isAdmin ? [{ id: "settings", label: "Site settings", icon: "settings", href: "/#admin-settings" }] : []),
           createSalesNavigationItem({ active: true, expanded: true }),
         ]} />

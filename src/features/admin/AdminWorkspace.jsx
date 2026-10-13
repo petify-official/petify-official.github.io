@@ -2,8 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase.js";
 import { formatProductPrice } from "../../lib/productPricing.js";
 import WorkspaceSidebar from "./WorkspaceSidebar.jsx";
+import { createAdminNavigationItems } from "./adminNavigation.js";
 import AccountMenu from "./AccountMenu.jsx";
-import { createSalesNavigationItem } from "./workspaceNavigation.js";
 import { deleteWorkspaceDraft, getWorkspaceDrafts } from "../../services/workspaceDrafts.js";
 import { clearSessionLifetime } from "../../hooks/sessionLifetime.js";
 import {
@@ -25,7 +25,11 @@ import {
   setProductActive,
 } from "../../services/admin.js";
 
-const SiteSettingsManager = lazy(() => import("./SiteSettingsManager.jsx"));
+function loadSiteSettingsManager() {
+  return import("./SiteSettingsManager.jsx");
+}
+
+const SiteSettingsManager = lazy(loadSiteSettingsManager);
 const ProductEditor = lazy(() => import("./products/ProductEditor.jsx"));
 
 export default function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
@@ -36,7 +40,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     const savedWorkspace = readAdminWorkspace(session.user.id);
     return {
       ...savedWorkspace,
-      activeView: initialView === "site-settings" || savedWorkspace.activeView === "site-settings" ? "site-settings" : "products",
+      activeView: initialView ?? (savedWorkspace.activeView === "site-settings" ? "site-settings" : "products"),
     };
   });
   const [persistenceError, setPersistenceError] = useState("");
@@ -55,11 +59,24 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
 
   useEffect(() => {
-    if (initialView === "site-settings") {
-      setSettingsVisited(true);
-      setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
+    if (initialView) {
+      if (initialView === "site-settings") setSettingsVisited(true);
+      setWorkspace((current) => ({ ...current, activeView: initialView }));
     }
   }, [initialView]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeView]);
+
+  useEffect(() => {
+    const prefetchTimer = window.setTimeout(() => {
+      loadSiteSettingsManager().catch((loadError) => {
+        console.error("Site settings could not be preloaded.", loadError);
+      });
+    }, 0);
+    return () => window.clearTimeout(prefetchTimer);
+  }, []);
 
   useEffect(() => {
     try {
@@ -253,14 +270,12 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
         <AccountMenu email={session.user.email} onSignOut={signOut} />
       </header>
       <main className="admin-content">
-        <WorkspaceSidebar items={[
-          { id: "products", label: "Products", icon: "products", active: activeView === "products", onClick: () => setWorkspace((current) => ({ ...current, activeView: "products" })) },
-          { id: "settings", label: "Site settings", icon: "settings", active: activeView === "site-settings", onClick: () => {
+        <WorkspaceSidebar items={createAdminNavigationItems(activeView, (view) => {
+          if (view === "site-settings") {
             setSettingsVisited(true);
-            setWorkspace((current) => ({ ...current, activeView: "site-settings" }));
-          } },
-          createSalesNavigationItem({ expanded: true }),
-        ]} />
+          }
+          setWorkspace((current) => ({ ...current, activeView: view }));
+        })} />
         <div className="admin-page-panel">
           {persistenceError && <p className="admin-error" role="alert">{persistenceError}</p>}
           <div hidden={activeView !== "site-settings"}>
@@ -268,7 +283,13 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               <>
                 <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
                 <Suspense fallback={<p className="admin-muted">Loading site settings...</p>}>
-                  <SiteSettingsManager adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={session.user.id} />
+                  <SiteSettingsManager
+                    adminBrand={adminBrand}
+                    onAdminBrandChange={onAdminBrandChange}
+                    userId={session.user.id}
+                    sections={sections}
+                    products={products}
+                  />
                 </Suspense>
               </>
             )}
