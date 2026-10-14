@@ -69,7 +69,7 @@ export default function SalesOverview({ metrics, range, onRangeChange, loading, 
                   <strong>{formatProductPrice(Number(period?.revenue) || 0)}</strong>
                   <small>Revenue · {Number(period?.orders) || 0} orders</small>
                   <small>AOV {formatProductPrice(Number(period?.averageOrderValue) || 0)}</small>
-                  <small>Collected {formatProductPrice(Number(period?.collected) || 0)}</small>
+                  {Number(period?.collected) > 0 && <small>Collected {formatProductPrice(Number(period.collected))}</small>}
                 </article>
               );
             })}
@@ -134,7 +134,7 @@ export default function SalesOverview({ metrics, range, onRangeChange, loading, 
               <ul>
                 {recentOrders.map((order) => (
                   <li key={order.id}>
-                    <div><strong>{order.invoice_number}</strong><span>{order.customer_name || "Customer"} · {formatDay(order.created_at)}</span></div>
+                    <div><strong>{order.invoice_number}</strong><span>{order.customer_name || "No customer details"} · {formatDay(order.created_at)}</span></div>
                     <div><strong>{formatProductPrice(Number(order.total) || 0)}</strong><span className={`sales-status sales-status-${order.status.replaceAll("_", "-")}`}>{order.status.replaceAll("_", " ")}</span></div>
                   </li>
                 ))}

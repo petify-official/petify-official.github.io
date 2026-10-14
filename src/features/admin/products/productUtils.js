@@ -32,6 +32,14 @@ export function slugify(value) {
 export function asEditableProduct(product) {
   return {
     ...product,
+    sectionId: product.sectionId ?? "",
+    badge: product.badge ?? "",
+    title: product.title ?? "",
+    description: product.description ?? "",
+    defaultWhatsappMsg: product.defaultWhatsappMsg ?? "",
+    price: product.price ?? "",
+    oldPrice: product.oldPrice ?? "",
+    saveTag: product.saveTag ?? "",
     variants: product.variants ?? [],
     variantsEnabled: Boolean(product.variants?.length),
     specsText: (product.specs ?? []).map((spec) => String(spec).replace(/<[^>]*>/g, "")).join("\n"),

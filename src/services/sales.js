@@ -19,6 +19,15 @@ export async function getSalesSettings() {
     enabled: data.sales_settings?.enabled !== false,
     invoicePrefix: data.sales_settings?.invoice_prefix || "INV",
     defaultPaymentMethod: data.sales_settings?.default_payment_method || "cash",
+    deliveryPartners: Array.isArray(data.sales_settings?.delivery_partners)
+      ? data.sales_settings.delivery_partners.filter((partner) =>
+        partner
+        && typeof partner.name === "string"
+        && Number.isFinite(Number(partner.charge))
+        && Number(partner.charge) >= 0)
+        .map((partner) => ({ name: partner.name.trim(), charge: Number(partner.charge) }))
+        .filter((partner) => partner.name)
+      : [],
   };
 }
 
@@ -32,6 +41,14 @@ export async function saveSalesSettings(settings) {
   if (!validMethods.includes(settings.defaultPaymentMethod)) {
     throw new Error("Choose a valid default payment method.");
   }
+  const deliveryPartners = (settings.deliveryPartners ?? []).map((partner) => {
+    const name = partner.name.trim();
+    const charge = Number(partner.charge);
+    if (!name || !Number.isFinite(charge) || charge < 0) {
+      throw new Error("Delivery partners need a name and a zero-or-greater delivery fee.");
+    }
+    return { name, charge };
+  });
 
   const { error } = await client
     .from("site_settings")
@@ -40,6 +57,7 @@ export async function saveSalesSettings(settings) {
         enabled: Boolean(settings.enabled),
         invoice_prefix: prefix,
         default_payment_method: settings.defaultPaymentMethod,
+        delivery_partners: deliveryPartners,
       },
       updated_at: new Date().toISOString(),
     })
@@ -120,6 +138,36 @@ export async function createManualSale(sale) {
   return data;
 }
 
+export async function updateManualSale(sale) {
+  const client = requireSupabase();
+  const { error } = await client.rpc("update_manual_sale", {
+    p_sale_id: sale.saleId,
+    p_customer_name: sale.customer.name || null,
+    p_customer_email: sale.customer.email || null,
+    p_customer_phone: sale.customer.phone || null,
+    p_items: sale.items.map((item) => ({
+      product_id: item.productId,
+      variant_id: item.variantId || null,
+      quantity: item.quantity,
+      unit_price: item.unitPrice,
+    })),
+    p_source: sale.source,
+    p_delivery_address: sale.deliveryAddress || null,
+    p_delivery_partner: sale.deliveryPartner || null,
+    p_tracking_reference: sale.trackingReference || null,
+    p_delivery_charge: sale.deliveryCharge,
+    p_delivery_status: sale.deliveryStatus,
+    p_notes: sale.notes || null,
+  });
+  if (error) throw error;
+}
+
+export async function deleteManualSale(saleId) {
+  const client = requireSupabase();
+  const { error } = await client.rpc("delete_manual_sale", { p_sale_id: saleId });
+  if (error) throw error;
+}
+
 export async function recordSalePayment(payment) {
   const client = requireSupabase();
   const { error } = await client.rpc("record_sale_payment", {
@@ -128,6 +176,15 @@ export async function recordSalePayment(payment) {
     p_method: payment.method,
     p_reference: payment.reference || null,
     p_notes: payment.notes || null,
+  });
+  if (error) throw error;
+}
+
+export async function setManualSalePaymentStatus(saleId, isPaid) {
+  const client = requireSupabase();
+  const { error } = await client.rpc("set_manual_sale_payment_status", {
+    p_sale_id: saleId,
+    p_is_paid: isPaid,
   });
   if (error) throw error;
 }

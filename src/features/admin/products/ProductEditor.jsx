@@ -251,8 +251,13 @@ export default function ProductEditor({ product, draft, products, sections, user
     setUploadProgress({ message: "Preparing product save...", percent: 3 });
 
     try {
-      const id = form.id.trim();
-      if (!id) throw new Error("Add a product title to create its product ID.");
+    const enteredId = form.id.trim();
+    const suggestedId = enteredId || slugify(form.title);
+    const id = isEditing
+      ? enteredId
+      : suggestedId && (!products.some((existingProduct) => existingProduct.id === suggestedId) || productIdCustomized)
+        ? suggestedId
+        : `product-${crypto.randomUUID()}`;
       const stockText = String(form.stockQuantity ?? 0);
       const stockQuantity = Number(stockText);
       if (!/^\d+$/.test(stockText) || !Number.isSafeInteger(stockQuantity) || stockQuantity < 0 || stockQuantity > 2147483647) {
@@ -268,22 +273,20 @@ export default function ProductEditor({ product, draft, products, sections, user
         ? form.variants.map((variant) => ({
           ...variant,
           label: variant.label.trim(),
-          price: parseVariantPrice(variant.price),
+          price: String(variant.price ?? "").trim() ? parseVariantPrice(variant.price) : null,
           oldPrice: variant.oldPrice === null || variant.oldPrice === undefined || String(variant.oldPrice).trim() === ""
             ? null
             : parseVariantPrice(variant.oldPrice),
         }))
         : [];
-      if (form.variantsEnabled && !variants.length) {
-        throw new Error("Add at least one variety or turn off purchasable varieties.");
-      }
       if (variants.some((variant) => (
-        !variant.label || !Number.isFinite(variant.price) || variant.price < 0
+        (variant.price !== null && (!Number.isFinite(variant.price) || variant.price < 0))
         || (variant.oldPrice !== null && (!Number.isFinite(variant.oldPrice) || variant.oldPrice < 0))
       ))) {
-        throw new Error("Each variety needs a label and a valid price. Previous prices must also be valid amounts.");
+        throw new Error("Variety prices and previous prices must be valid amounts when entered.");
       }
-      if (new Set(variants.map((variant) => variant.label.toLowerCase())).size !== variants.length) {
+      const filledVariantLabels = variants.map((variant) => variant.label.toLowerCase()).filter(Boolean);
+      if (new Set(filledVariantLabels).size !== filledVariantLabels.length) {
         throw new Error("Each variety needs a unique label.");
       }
       const queuedFiles = imageItems.filter((item) => item.file);
@@ -439,7 +442,7 @@ export default function ProductEditor({ product, draft, products, sections, user
           <div className="admin-editor-heading">
             <div>
               <p className="admin-eyebrow">{isEditing ? "EDIT PRODUCT" : "NEW PRODUCT"}</p>
-              <h2 id="admin-product-editor-title">{isEditing ? form.title : "Add a product"}</h2>
+              <h2 id="admin-product-editor-title">{isEditing ? form.title || "Untitled product" : "Add a product"}</h2>
             </div>
             <AdminButton ref={closeButtonRef} aria-label="Close product editor" onClick={requestCancel} disabled={!productDraft.loaded || busy}>×</AdminButton>
           </div>
@@ -452,7 +455,8 @@ export default function ProductEditor({ product, draft, products, sections, user
           {productDraft.restored && <AdminNotice kind="success">Saved product draft restored. Storefront changes remain unpublished until you publish this product.</AdminNotice>}
           <fieldset className="admin-form-grid admin-editor-fields" disabled={!productDraft.loaded || busy}>
             <label>Store section
-              <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)} required>
+              <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)}>
+                <option value="">No section</option>
                 {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
               </select>
             </label>
@@ -462,23 +466,23 @@ export default function ProductEditor({ product, draft, products, sections, user
                 <option value="combo">Combo offer</option>
               </select>
             </label>
-            <label>Badge<input value={form.badge} onChange={(event) => update("badge", event.target.value)} required /></label>
-            <label className="admin-span-two">Product name<input value={form.title} onChange={(event) => updateTitle(event.target.value)} required /></label>
+            <label>Badge<input value={form.badge} onChange={(event) => update("badge", event.target.value)} /></label>
+            <label className="admin-span-two">Product name<input value={form.title} onChange={(event) => updateTitle(event.target.value)} /></label>
             {isEditing ? (
               <label>Product ID<input value={form.id} readOnly /><span className="admin-field-hint">This ID is fixed after creation because it identifies the saved product and its image folder.</span></label>
             ) : (
               <label className="admin-span-two">Product ID<input value={form.id} onChange={(event) => {
                 setProductIdCustomized(true);
                 update("id", event.target.value);
-              }} required aria-describedby="product-id-hint" />
+              }} aria-describedby="product-id-hint" />
                 <span className="admin-field-hint" id="product-id-hint">
-                  Suggested from the product name: <strong>{slugify(form.title) || "Enter a product name"}</strong>. This unique ID identifies the product and its image folder. You can change it before saving; use lowercase letters, numbers, and hyphens.
+                  Suggested from the product name: <strong>{slugify(form.title) || "Generated when saved"}</strong>. This unique ID identifies the product and its image folder. You can change it before saving; use lowercase letters, numbers, and hyphens.
                 </span>
               </label>
             )}
             <label>Display order<input type="number" min="0" step="1" value={form.displayOrder} onChange={(event) => update("displayOrder", event.target.value)} /></label>
                   <label>Stock quantity<input type="number" inputMode="numeric" min="0" step="1" value={form.stockQuantity ?? 0} onChange={(event) => update("stockQuantity", event.target.value)} /></label>
-            <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} required /></label>
+            <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} /></label>
             {form.type === "single" && <label className="admin-span-two">Product details, one per line<textarea rows="4" value={form.specsText} onChange={(event) => update("specsText", event.target.value)} placeholder={"Material: Cotton\nSize: Medium"} /></label>}
             {form.type === "combo" && <label>Offer tag<input value={form.saveTag} onChange={(event) => update("saveTag", event.target.value)} placeholder="SAVE ₹65" /></label>}
             <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={Boolean(form.variantsEnabled)} onChange={(event) => toggleVariants(event.target.checked)} /> This product has purchasable varieties with different prices</label>
@@ -488,8 +492,8 @@ export default function ProductEditor({ product, draft, products, sections, user
                 <p className="admin-field-hint">Add one option per size, pack quantity, or type. Keep the three gallery photos in Product photos; those are the product gallery, not separate varieties.</p>
                 {(form.variants ?? []).map((variant, index) => (
                   <div className="product-variant-row" key={variant.id}>
-                    <label>Option label<input value={variant.label} onChange={(event) => updateVariant(variant.id, "label", event.target.value)} placeholder="e.g. 250 g, 500 g, Pack of 4" required /></label>
-                    <label>Price (₹)<input type="text" inputMode="decimal" value={variant.price} onChange={(event) => updateVariant(variant.id, "price", event.target.value)} placeholder="1,299" required /></label>
+                    <label>Option label<input value={variant.label} onChange={(event) => updateVariant(variant.id, "label", event.target.value)} placeholder="e.g. 250 g, 500 g, Pack of 4" /></label>
+                    <label>Price (₹)<input type="text" inputMode="decimal" value={variant.price} onChange={(event) => updateVariant(variant.id, "price", event.target.value)} placeholder="1,299" /></label>
                     <label>Previous price (₹)<input type="text" inputMode="decimal" value={variant.oldPrice ?? ""} onChange={(event) => updateVariant(variant.id, "oldPrice", event.target.value)} placeholder="Optional" /></label>
                     <button className="admin-delete-button" type="button" aria-label={`Remove variety ${index + 1}`} onClick={() => removeVariant(variant.id)}>Remove</button>
                   </div>
@@ -502,7 +506,7 @@ export default function ProductEditor({ product, draft, products, sections, user
                 <label>Previous price<input type="text" inputMode="decimal" value={form.oldPrice} onChange={(event) => update("oldPrice", event.target.value)} placeholder="₹1,499" /></label>
               </>
             )}
-            <label className="admin-span-two">WhatsApp order message<input value={form.defaultWhatsappMsg} onChange={(event) => update("defaultWhatsappMsg", event.target.value)} required /></label>
+            <label className="admin-span-two">WhatsApp order message<input value={form.defaultWhatsappMsg} onChange={(event) => update("defaultWhatsappMsg", event.target.value)} /></label>
             <div className="admin-image-picker-actions admin-span-two">
               <ImageUploadField
                 label="Choose photos"

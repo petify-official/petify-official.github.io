@@ -266,8 +266,12 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
       </section>
       <section className="admin-settings-block" aria-labelledby="admin-favicon-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-favicon-settings-title">Browser favicon</h2></div></div>
-        <form className="admin-store-logo" onSubmit={submitFavicon}>
-          {faviconPreview || storeFavicon ? <img src={faviconPreview || storeFavicon} alt={faviconPreview ? "Selected favicon preview" : "Current browser favicon"} /> : <span className="admin-store-logo-empty">Default icon</span>}
+        <form className="admin-store-favicon" onSubmit={submitFavicon}>
+          <span className="admin-favicon-preview">
+            {faviconPreview || storeFavicon
+              ? <img src={faviconPreview || storeFavicon} alt={faviconPreview ? "Selected favicon preview" : "Current browser favicon"} />
+              : <span className="admin-store-logo-empty">Default icon</span>}
+          </span>
           <ImageUploadField label="Upload favicon" accept="image/*,.ico" maxSizeBytes={2 * 1024 * 1024} onChange={(files) => setFaviconFile(files[0] ?? null)} />
           <div className="admin-form-actions">
             <WorkspaceDraftControls draft={faviconDraft} label="favicon" canSave={Boolean(faviconFile)} onSave={() => saveAssetDraft(faviconFile, setStoreFavicon, faviconDraft)} />

@@ -1647,6 +1647,62 @@ td.admin-state-empty {
   background: var(--card-bg);
 }
 
+.admin-store-favicon {
+  min-width: 0;
+  margin: 1rem 0 1.5rem;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.85rem 1rem;
+  border: 1px solid #dbe3ea;
+  border-radius: var(--admin-radius-sm);
+  background: var(--card-bg);
+}
+
+.admin-favicon-preview {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #dbe3ea;
+  border-radius: var(--admin-radius-sm);
+  background: #f8fafc;
+}
+
+.admin-favicon-preview > img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.admin-favicon-preview .admin-store-logo-empty {
+  width: auto;
+  height: auto;
+  flex: initial;
+  border: 0;
+  background: transparent;
+  font-size: 0.65rem;
+}
+
+.admin-store-favicon .admin-image-upload-field,
+.admin-store-favicon .admin-form-actions {
+  min-width: 0;
+  grid-column: 2;
+}
+
+.admin-store-favicon .admin-image-upload-field {
+  grid-row: 1;
+}
+
+.admin-store-favicon .admin-form-actions {
+  flex-wrap: wrap;
+}
+
 .admin-logo-crop-preview {
   width: 72px;
   height: 72px;
@@ -2931,10 +2987,17 @@ td.admin-state-empty {
 
   .admin-product-card-controls > button {
     width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.6rem 0.7rem;
+    line-height: 1.2;
   }
 
   .admin-product-delete-direct {
-    display: inline-flex;
+    white-space: nowrap;
   }
 
   .admin-product-overflow {

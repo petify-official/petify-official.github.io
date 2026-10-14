@@ -89,7 +89,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     const query = productSearch.trim().toLocaleLowerCase();
     const matches = products.filter((product) => {
       const matchesSearch = !query
-        || product.title.toLocaleLowerCase().includes(query)
+        || (product.title ?? "").toLocaleLowerCase().includes(query)
         || product.id.toLocaleLowerCase().includes(query);
       const matchesStatus = productStatusFilter === "all"
         || (productStatusFilter === "active" ? product.isActive : !product.isActive);
@@ -99,7 +99,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     const priceOf = (product) => product.variants?.length
       ? Math.min(...product.variants.map((variant) => Number(variant.price)))
       : parseProductPrice(product.price);
-    if (productSort === "name") matches.sort((first, second) => first.title.localeCompare(second.title));
+    if (productSort === "name") matches.sort((first, second) => (first.title ?? "").localeCompare(second.title ?? ""));
     if (productSort === "price-low") matches.sort((first, second) => priceOf(first) - priceOf(second));
     if (productSort === "price-high") matches.sort((first, second) => priceOf(second) - priceOf(first));
     return matches;
@@ -344,7 +344,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
 
   async function removeProduct(product) {
     if (!await confirm({
-      title: `Delete ${product.title}?`,
+      title: `Delete ${product.title || "Untitled product"}?`,
       description: "The product will be removed in five seconds. You can undo this from the message at the bottom of the screen.",
       confirmLabel: "Delete product",
     })) return;
@@ -578,7 +578,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                     <tbody>
                       {filteredProducts.map((product) => (
                         <tr key={product.id}>
-                          <td><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title}</strong><span>{product.id}</span></div></div></td>
+                          <td><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title || "Untitled product"}</strong><span>{product.id}</span></div></div></td>
                           <td>{sections.find((section) => section.id === product.sectionId)?.title || "Unassigned"}</td>
                           <td>{productPriceLabel(product)}</td>
                           <td>
@@ -592,14 +592,14 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                                 min="0"
                                 step="1"
                                 required
-                                aria-label={`Stock quantity for ${product.title}`}
+                                aria-label={`Stock quantity for ${product.title || "Untitled product"}`}
                                 value={stockDrafts[product.id] ?? String(product.stockQuantity ?? 0)}
                                 onChange={(event) => setStockDrafts((current) => ({ ...current, [product.id]: event.target.value }))}
                               />
                               <AdminButton type="submit" disabled={savingVisibilityId === product.id}>Save</AdminButton>
                             </form>
                           </td>
-                          <td><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
+                          <td><label className="admin-inline-switch"><input type="checkbox" role="switch" checked={product.isActive} disabled={Boolean(savingVisibilityId)} aria-label={`${product.isActive ? "Hide" : "Show"} ${product.title || "Untitled product"}`} onChange={() => toggleProductVisibility(product)} /><span>{product.isActive ? "Visible" : "Hidden"}</span></label></td>
                           <td><div className="admin-row-actions"><button type="button" onClick={() => {
                             const editableProduct = asEditableProduct(product);
                             saveEditorDraft({ key: editableProduct.id, isEditing: true, product: editableProduct, form: editableProduct, images: editableProduct.images ?? [], pendingPhotoCount: 0 });

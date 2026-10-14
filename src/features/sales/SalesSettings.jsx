@@ -27,6 +27,7 @@ export default function SalesSettings({ userId }) {
     enabled: true,
     invoicePrefix: "INV",
     defaultPaymentMethod: "cash",
+    deliveryPartners: [],
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -36,7 +37,11 @@ export default function SalesSettings({ userId }) {
   const [newSalesUserId, setNewSalesUserId] = useState("");
   const [savingSalesUser, setSavingSalesUser] = useState(false);
   const { confirm, dialogProps } = useConfirmDialog();
-  const restoreSalesSettingsDraft = useCallback((draft) => setSettings(draft), []);
+  const restoreSalesSettingsDraft = useCallback((draft) => setSettings((current) => ({
+    ...current,
+    ...draft,
+    deliveryPartners: Array.isArray(draft.deliveryPartners) ? draft.deliveryPartners : current.deliveryPartners,
+  })), []);
   const settingsDraft = useWorkspaceDraft({
     userId,
     draftType: "sales-settings",
@@ -107,7 +112,7 @@ export default function SalesSettings({ userId }) {
         setError(`Sales settings were saved, but their draft could not be removed: ${clearError.message}`);
         return;
       }
-      setNotice("Sales settings saved to Supabase.");
+      setNotice("Sales settings saved.");
     } catch (saveError) {
       setError(saveError.message || "Sales settings could not be saved.");
     } finally {

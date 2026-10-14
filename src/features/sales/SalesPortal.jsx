@@ -121,7 +121,7 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
           createSalesNavigationItem({ active: true, expanded: true }),
         ]} />
         <div className="admin-page-panel">
-          <SalesDashboard products={products} userId={session.user.id} />
+          <SalesDashboard products={products} userId={session.user.id} isAdmin={isAdmin} />
         </div>
       </main>
       <AdminBottomNav items={[
