@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { getStorefrontContent, saveStorefrontContent } from "../../services/admin.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
+import AdminNotice from "./components/AdminNotice.jsx";
+import AdminState from "./components/AdminState.jsx";
 
 const visibilityOptions = [
   ["brand", "Brand logo"],
@@ -92,7 +94,7 @@ export default function StorefrontContentEditor({ userId }) {
       <div className="admin-hero-pills-heading">
         <div><p className="admin-eyebrow">CLOUD STOREFRONT</p><h2 id="admin-storefront-content-title">Store content</h2></div>
       </div>
-      {loading ? <p className="admin-muted">Loading storefront settings...</p> : content && (
+      {loading ? <AdminState kind="loading" description="Loading storefront settings..." /> : content && (
         <form className="admin-form-grid" onSubmit={submit}>
           <label>Brand name<input value={content.brandTitle} onChange={(event) => update("brandTitle", event.target.value)} required /></label>
           <label>Tagline<input value={content.tagline} onChange={(event) => update("tagline", event.target.value)} required /></label>
@@ -130,15 +132,15 @@ export default function StorefrontContentEditor({ userId }) {
             ))}
             <button className="admin-secondary-button" type="button" onClick={() => update("features", [...content.features, { title: "", description: "" }])}>Add feature</button>
           </div>
-          {error && <p className="admin-error admin-span-two" role="alert">{error}</p>}
-          {notice && <p className="admin-success admin-span-two" role="status">{notice}</p>}
+          {error && <AdminNotice kind="error" className="admin-span-two">{error}</AdminNotice>}
+          {notice && <AdminNotice kind="success" className="admin-span-two">{notice}</AdminNotice>}
           <div className="admin-form-actions admin-span-two">
             <WorkspaceDraftControls draft={contentDraft} label="store content" />
             <button className="admin-primary-button" type="submit" disabled={saving}>{saving ? "Saving content..." : "Save store content"}</button>
           </div>
         </form>
       )}
-      {!loading && !content && error && <p className="admin-error" role="alert">{error}</p>}
+      {!loading && !content && error && <AdminNotice kind="error">{error}</AdminNotice>}
     </section>
   );
 }

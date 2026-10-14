@@ -1,15 +1,18 @@
 import { supabase } from "../lib/supabase.js";
+import { compressImageFile } from "../lib/imageProcessing.js";
 
 const imageBucket = "product-images";
 
 export async function getAdminProducts() {
-  const { data, error } = await supabase
-    .from("products")
-    .select("*")
-    .order("display_order", { ascending: true });
-  if (error) throw error;
+  const [productsResult, inventoryResult] = await Promise.all([
+    supabase.from("products").select("*").order("display_order", { ascending: true }),
+    supabase.from("product_inventory").select("product_id, quantity"),
+  ]);
+  if (productsResult.error) throw productsResult.error;
+  if (inventoryResult.error) throw inventoryResult.error;
 
-  return data.map((row) => ({
+  const stockByProduct = new Map(inventoryResult.data.map((row) => [row.product_id, Number(row.quantity)]));
+  return productsResult.data.map((row) => ({
     id: row.id,
     type: row.type,
     sectionId: row.section_id,
@@ -25,6 +28,7 @@ export async function getAdminProducts() {
     defaultWhatsappMsg: row.default_whatsapp_msg,
     isActive: row.is_active,
     displayOrder: row.display_order,
+    stockQuantity: stockByProduct.get(row.id) ?? 0,
   }));
 }
 
@@ -199,8 +203,13 @@ export async function saveCatalogSectionOrder(sections) {
   if (failedUpdate) throw failedUpdate.error;
 }
 
-export async function updateStoreLogo(file) {
-  const [logoUrl] = await uploadProductImages("store-settings", [file]);
+export async function updateStoreLogo(file, imageOptions = {}) {
+  const [logoUrl] = await uploadProductImages("store-settings", [file], undefined, {
+    compress: true,
+    maxSizeBytes: 5 * 1024 * 1024,
+    maxDimension: 1400,
+    ...imageOptions,
+  });
   await saveStoreLogoUrl(logoUrl);
   return logoUrl;
 }
@@ -214,7 +223,9 @@ export async function saveStoreLogoUrl(logoUrl) {
 }
 
 export async function updateStoreFavicon(file) {
-  const [faviconUrl] = await uploadProductImages("store-settings", [file]);
+  const [faviconUrl] = await uploadProductImages("store-settings", [file], undefined, {
+    maxSizeBytes: 2 * 1024 * 1024,
+  });
   await saveStoreFaviconUrl(faviconUrl);
   return faviconUrl;
 }
@@ -227,11 +238,14 @@ export async function saveStoreFaviconUrl(faviconUrl) {
   if (error) throw error;
 }
 
-export async function uploadProductImages(productId, files, onProgress) {
+export async function uploadProductImages(productId, files, onProgress, options = {}) {
   const uploadedUrls = [];
+  const uploadFiles = options.compress
+    ? await Promise.all(files.map((file) => compressImageFile(file, options)))
+    : files;
 
-  for (const [index, file] of files.entries()) {
-    onProgress?.({ completed: index, total: files.length, fileName: file.name });
+  for (const [index, file] of uploadFiles.entries()) {
+    onProgress?.({ completed: index, total: uploadFiles.length, fileName: file.name });
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
     const filePath = `${productId}/${crypto.randomUUID()}-${safeName}`;
     const { error } = await supabase.storage.from(imageBucket).upload(filePath, file, {
@@ -244,7 +258,7 @@ export async function uploadProductImages(productId, files, onProgress) {
     if (error) throw error;
 
     uploadedUrls.push(supabase.storage.from(imageBucket).getPublicUrl(filePath).data.publicUrl);
-    onProgress?.({ completed: index + 1, total: files.length, fileName: "" });
+    onProgress?.({ completed: index + 1, total: uploadFiles.length, fileName: "" });
   }
 
   return uploadedUrls;
@@ -279,6 +293,9 @@ export async function saveProduct(product) {
 
 export async function deleteProduct(product) {
   const { error } = await supabase.from("products").delete().eq("id", product.id);
+  if (error?.code === "23503") {
+    throw new Error("This product is linked to sales history and cannot be deleted. Hide it instead.");
+  }
   if (error) throw error;
 
   const storagePrefix = `/storage/v1/object/public/${imageBucket}/`;
@@ -288,7 +305,9 @@ export async function deleteProduct(product) {
 
   if (paths.length) {
     const { error: storageError } = await supabase.storage.from(imageBucket).remove(paths);
-    if (storageError) throw storageError;
+    if (storageError) {
+      throw new Error(`Product deleted, but one or more product photos could not be removed: ${storageError.message}`);
+    }
   }
 }
 
@@ -306,4 +325,28 @@ export async function setProductActive(productId, isActive) {
     .update({ is_active: isActive, updated_at: new Date().toISOString() })
     .eq("id", productId);
   if (error) throw error;
+}
+
+export async function setProductPrice(productId, price) {
+  const { error } = await supabase
+    .from("products")
+    .update({ price, updated_at: new Date().toISOString() })
+    .eq("id", productId);
+  if (error) throw error;
+}
+
+export async function setProductStock(productId, quantity) {
+  const normalizedQuantity = Number(quantity);
+  if (!Number.isSafeInteger(normalizedQuantity) || normalizedQuantity < 0 || normalizedQuantity > 2147483647) {
+    throw new Error("Stock must be a whole number of zero or more.");
+  }
+
+  const { data, error } = await supabase
+    .from("product_inventory")
+    .update({ quantity: normalizedQuantity })
+    .eq("product_id", productId)
+    .select("product_id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Stock was not found. Run the inventory SQL and reload products.");
 }

@@ -8,6 +8,11 @@ import {
 } from "../../services/sales.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "../admin/WorkspaceDraftControls.jsx";
+import useConfirmDialog from "../../hooks/useConfirmDialog.js";
+import ConfirmDialog from "../admin/components/ConfirmDialog.jsx";
+import AdminNotice from "../admin/components/AdminNotice.jsx";
+import AdminState from "../admin/components/AdminState.jsx";
+import AdminButton from "../admin/components/AdminButton.jsx";
 
 const methods = [
   ["cash", "Cash"],
@@ -30,6 +35,7 @@ export default function SalesSettings({ userId }) {
   const [salesUsers, setSalesUsers] = useState([]);
   const [newSalesUserId, setNewSalesUserId] = useState("");
   const [savingSalesUser, setSavingSalesUser] = useState(false);
+  const { confirm, dialogProps } = useConfirmDialog();
   const restoreSalesSettingsDraft = useCallback((draft) => setSettings(draft), []);
   const settingsDraft = useWorkspaceDraft({
     userId,
@@ -71,7 +77,11 @@ export default function SalesSettings({ userId }) {
   }
 
   async function revokeSalesAccount(userId) {
-    if (!window.confirm("Remove this account's Sales portal access?")) return;
+    if (!await confirm({
+      title: "Remove this account's Sales portal access?",
+      description: "This account will no longer be able to access the Sales workspace.",
+      confirmLabel: "Remove access",
+    })) return;
     setError("");
     setNotice("");
     try {
@@ -105,10 +115,11 @@ export default function SalesSettings({ userId }) {
     }
   }
 
-  if (loading) return <p className="admin-muted">Loading sales settings...</p>;
+  if (loading) return <AdminState kind="loading" description="Loading sales settings..." />;
 
   return (
     <section className="admin-settings-block" aria-labelledby="sales-settings-title">
+      <ConfirmDialog {...dialogProps} />
       <div className="admin-settings-heading">
         <div>
           <p className="admin-eyebrow">BUSINESS MANAGEMENT</p>
@@ -144,8 +155,8 @@ export default function SalesSettings({ userId }) {
             {methods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        {error && <p className="admin-error" role="alert">{error}</p>}
-        {notice && <p className="admin-success" role="status">{notice}</p>}
+        {error && <AdminNotice kind="error">{error}</AdminNotice>}
+        {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
         <div className="admin-form-actions">
           <WorkspaceDraftControls draft={settingsDraft} label="Sales settings" />
           <button className="admin-primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Apply sales settings"}</button>
@@ -166,16 +177,16 @@ export default function SalesSettings({ userId }) {
               required
             />
           </label>
-          <button className="admin-secondary-button" type="submit" disabled={savingSalesUser}>
+          <AdminButton type="submit" disabled={savingSalesUser}>
             {savingSalesUser ? "Granting access..." : "Grant Sales access"}
-          </button>
+          </AdminButton>
         </form>
         {salesUsers.length ? (
           <ul className="sales-access-list">
             {salesUsers.map((user) => (
               <li key={user.user_id}>
                 <code>{user.user_id}</code>
-                <button className="admin-delete-button" type="button" onClick={() => revokeSalesAccount(user.user_id)}>Remove access</button>
+                <AdminButton variant="danger" onClick={() => revokeSalesAccount(user.user_id)}>Remove access</AdminButton>
               </li>
             ))}
           </ul>

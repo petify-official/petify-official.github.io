@@ -18,6 +18,11 @@ import {
 } from "../../services/admin.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
+import ImageUploadField from "./components/ImageUploadField.jsx";
+import AdminNotice from "./components/AdminNotice.jsx";
+import AdminState from "./components/AdminState.jsx";
+import useObjectUrl from "../../hooks/useObjectUrl.js";
+import AdminButton from "./components/AdminButton.jsx";
 
 const colorFields = [
   ["primary", "Primary"],
@@ -29,12 +34,41 @@ const colorFields = [
   ["card", "Card background"],
 ];
 
+function PaletteColorField({ label, value, onChange }) {
+  const [hexDraft, setHexDraft] = useState(value);
+
+  useEffect(() => setHexDraft(value), [value]);
+
+  function commitHex() {
+    if (/^#[0-9a-f]{6}$/i.test(hexDraft)) onChange(hexDraft);
+    else setHexDraft(value);
+  }
+
+  return (
+    <label className="admin-palette-color-field">
+      <span>{label}</span>
+      <div>
+        <input type="color" value={value} aria-label={`${label} color`} onChange={(event) => onChange(event.target.value)} />
+        <input
+          type="text"
+          inputMode="text"
+          value={hexDraft}
+          pattern="#[0-9A-Fa-f]{6}"
+          aria-label={`${label} hex value`}
+          onChange={(event) => setHexDraft(event.target.value)}
+          onBlur={commitHex}
+        />
+      </div>
+    </label>
+  );
+}
+
 export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChange, userId }) {
   const [palette, setPalette] = useState(DEFAULT_COLOR_PALETTE);
   const [loadingScreen, setLoadingScreen] = useState(DEFAULT_LOADING_SCREEN);
   const [dashboardBrand, setDashboardBrand] = useState(normalizeAdminBrand(adminBrand ?? DEFAULT_ADMIN_BRAND));
   const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
+  const imagePreview = useObjectUrl(imageFile);
   const [loading, setLoading] = useState(true);
   const [savingPalette, setSavingPalette] = useState(false);
   const [savingAdminBrand, setSavingAdminBrand] = useState(false);
@@ -70,16 +104,6 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
   });
 
   useEffect(() => {
-    if (!imageFile) {
-      setImagePreview("");
-      return undefined;
-    }
-    const previewUrl = URL.createObjectURL(imageFile);
-    setImagePreview(previewUrl);
-    return () => URL.revokeObjectURL(previewUrl);
-  }, [imageFile]);
-
-  useEffect(() => {
     let active = true;
     getAppearanceSettings().then(({ colorPalette, loadingScreen: savedLoadingScreen, adminBrand: savedAdminBrand }) => {
       if (!active) return;
@@ -97,6 +121,10 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!loading) applyColorPalette(palette);
+  }, [loading, palette]);
 
   function updateAdminBrand(field, value) {
     setDashboardBrand((current) => ({ ...current, [field]: value }));
@@ -144,6 +172,14 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     setNotice("");
   }
 
+  function resetPalette() {
+    setPalette({
+      preset: DEFAULT_COLOR_PALETTE.preset,
+      colors: { ...DEFAULT_COLOR_PALETTE.colors },
+    });
+    setNotice("");
+  }
+
   async function submitPalette(event) {
     event.preventDefault();
     setSavingPalette(true);
@@ -180,7 +216,11 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     try {
       let nextLoadingScreen = loadingScreen;
       if (imageFile) {
-        const [imageUrl] = await uploadProductImages("store-settings", [imageFile]);
+        const [imageUrl] = await uploadProductImages("store-settings", [imageFile], undefined, {
+          compress: true,
+          maxSizeBytes: 5 * 1024 * 1024,
+          maxDimension: 1800,
+        });
         nextLoadingScreen = { ...loadingScreen, imageUrl };
       }
       await saveLoadingScreen(nextLoadingScreen);
@@ -204,7 +244,11 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
   async function saveLoadingScreenDraft() {
     let nextLoadingScreen = loadingScreen;
     if (imageFile) {
-      const [imageUrl] = await uploadProductImages("drafts", [imageFile]);
+      const [imageUrl] = await uploadProductImages("drafts", [imageFile], undefined, {
+        compress: true,
+        maxSizeBytes: 5 * 1024 * 1024,
+        maxDimension: 1800,
+      });
       nextLoadingScreen = { ...loadingScreen, imageUrl };
       setLoadingScreen(nextLoadingScreen);
       setImageFile(null);
@@ -212,15 +256,15 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
     await loadingDraft.saveNow(nextLoadingScreen);
   }
 
-  if (loading) return <p className="admin-muted">Loading appearance settings...</p>;
+  if (loading) return <AdminState kind="loading" description="Loading appearance settings..." />;
 
   return (
     <section className="admin-settings-block" aria-labelledby="admin-appearance-settings-title">
       <div className="admin-settings-heading">
         <div><p className="admin-eyebrow">SITE APPEARANCE</p><h2 id="admin-appearance-settings-title">Colors and loading screen</h2></div>
       </div>
-      {error && <p className="admin-error" role="alert">{error}</p>}
-      {notice && <p className="admin-success" role="status">{notice}</p>}
+      {error && <AdminNotice kind="error">{error}</AdminNotice>}
+      {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
       <form className="admin-form-grid admin-loading-screen-form" onSubmit={submitAdminBrand}>
         <h3 className="admin-span-two">Admin dashboard brand</h3>
         <label>Dashboard name<input value={dashboardBrand.name} onChange={(event) => updateAdminBrand("name", event.target.value)} required /></label>
@@ -237,14 +281,29 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
             <option value="custom">Custom colors</option>
           </select>
         </label>
+        <div className="admin-palette-swatches admin-span-two" aria-label="Color presets">
+          {Object.entries(COLOR_PALETTES).map(([id, preset]) => (
+            <button
+              className={`admin-palette-swatch${palette.preset === id ? " active" : ""}`}
+              key={id}
+              type="button"
+              aria-pressed={palette.preset === id}
+              onClick={() => choosePreset(id)}
+            >
+              <span style={{ background: preset.colors.primary }} aria-hidden="true" />
+              {preset.name}
+            </button>
+          ))}
+        </div>
         <fieldset className="admin-color-palette admin-span-two">
           <legend>Customize colors</legend>
           {colorFields.map(([key, label]) => (
-            <label key={key}>{label}<input type="color" value={palette.colors[key]} onChange={(event) => updateColor(key, event.target.value)} /></label>
+            <PaletteColorField key={key} label={label} value={palette.colors[key]} onChange={(value) => updateColor(key, value)} />
           ))}
         </fieldset>
         <div className="admin-form-actions admin-span-two">
           <WorkspaceDraftControls draft={paletteDraft} label="color palette" />
+          <AdminButton onClick={resetPalette}>Reset to default</AdminButton>
           <button className="admin-primary-button" type="submit" disabled={savingPalette}>{savingPalette ? "Saving..." : "Save color palette"}</button>
         </div>
       </form>
@@ -255,7 +314,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
         <label className="admin-span-two">Message<input value={loadingScreen.message} onChange={(event) => updateLoadingScreen("message", event.target.value)} required /></label>
         <div className="admin-loading-image admin-span-two">
           <img src={imagePreview || loadingScreen.imageUrl} alt="Loading screen preview" />
-          <label>Loading image<input type="file" accept="image/*" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
+          <ImageUploadField label="Loading image" maxSizeBytes={5 * 1024 * 1024} onChange={(files) => setImageFile(files[0] ?? null)} />
         </div>
         <div className="admin-form-actions admin-span-two">
           <WorkspaceDraftControls draft={loadingDraft} label="loading screen" onSave={saveLoadingScreenDraft} />

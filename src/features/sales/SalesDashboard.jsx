@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatProductPrice, parseProductPrice } from "../../lib/productPricing.js";
-import { createManualSale, getSales, getSalesSettings, recordSalePayment, updateSaleDelivery } from "../../services/sales.js";
+import { formatDate } from "../../lib/formatters.js";
+import { createManualSale, getSales, getSalesDashboardMetrics, getSalesSettings, recordSalePayment, updateSaleDelivery } from "../../services/sales.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
+import useConfirmDialog from "../../hooks/useConfirmDialog.js";
+import useScrollAwareVisibility from "../../hooks/useScrollAwareVisibility.js";
+import ConfirmDialog from "../admin/components/ConfirmDialog.jsx";
+import AdminNotice from "../admin/components/AdminNotice.jsx";
+import AdminState from "../admin/components/AdminState.jsx";
+import SalesOverview from "./SalesOverview.jsx";
 import "./sales.css";
 
 const paymentMethods = [
@@ -11,10 +18,6 @@ const paymentMethods = [
   ["bank_transfer", "Bank transfer"],
   ["other", "Other"],
 ];
-
-function dateLabel(value) {
-  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(new Date(value));
-}
 
 function roundMoney(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -32,6 +35,8 @@ function hasSaleDraftContent(draft) {
 
 export default function SalesDashboard({ products, userId }) {
   const [sales, setSales] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [metricRange, setMetricRange] = useState("last7Days");
   const [salesSettings, setSalesSettings] = useState(null);
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -55,9 +60,17 @@ export default function SalesDashboard({ products, userId }) {
   const [expandedSaleId, setExpandedSaleId] = useState("");
   const [paymentDraft, setPaymentDraft] = useState({ amount: "", method: "cash", reference: "", notes: "" });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saleMenuOpen, setSaleMenuOpen] = useState(false);
+  const [saleTypeChoice, setSaleTypeChoice] = useState("offline");
+  const [saleFormOpen, setSaleFormOpen] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const { confirm, dialogProps } = useConfirmDialog();
+  const floatingActionsVisible = useScrollAwareVisibility();
+  const pullStartY = useRef(null);
+  const saleFormRef = useRef(null);
 
   const salesDraftValue = {
     customerId,
@@ -149,29 +162,69 @@ export default function SalesDashboard({ products, userId }) {
   const requestedPaidAmount = roundMoney(Math.max(Number(paidAmount) || 0, 0));
   const paidAmountInvalid = requestedPaidAmount > total || Number(paidAmount) < 0;
   const filteredSales = sales.filter((sale) => filter === "all" || sale.source === filter);
-  const totals = sales.reduce((result, sale) => {
-    result.revenue += Number(sale.total);
-    result.paid += Number(sale.amount_paid);
-    result.pending += Number(sale.total) - Number(sale.amount_paid);
-    return result;
-  }, { revenue: 0, paid: 0, pending: 0 });
-
-  async function refreshSales() {
+  async function refreshSales({ showRefreshing = false } = {}) {
     setError("");
+    if (showRefreshing) setRefreshing(true);
     try {
-      const [nextSales, nextSettings] = await Promise.all([getSales(), getSalesSettings()]);
+      const [nextSales, nextSettings, nextMetrics] = await Promise.all([
+        getSales(),
+        getSalesSettings(),
+        getSalesDashboardMetrics(),
+      ]);
       setSales(nextSales);
       setSalesSettings(nextSettings);
+      setMetrics(nextMetrics);
       setPaymentMethod(nextSettings.defaultPaymentMethod);
       setPaymentDraft((current) => ({ ...current, method: nextSettings.defaultPaymentMethod }));
     } catch (loadError) {
       setError(loadError.message || "Sales could not be loaded from Supabase.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => { refreshSales(); }, []);
+
+  useEffect(() => {
+    if (!saleFormOpen) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      saleFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [saleFormOpen]);
+
+  function startSale(nextSource) {
+    setSource(nextSource);
+    setSaleTypeChoice(nextSource);
+    setSaleMenuOpen(false);
+    setSaleFormOpen(true);
+  }
+
+  function toggleSaleMenu() {
+    if (!saleMenuOpen) setSaleTypeChoice(source);
+    setSaleMenuOpen(!saleMenuOpen);
+  }
+
+  function startPullRefresh(event) {
+    if (
+      window.scrollY <= 0
+      && !event.target.closest("input, textarea, select, button, a, [role='button']")
+    ) {
+      pullStartY.current = event.touches[0]?.clientY ?? null;
+    } else {
+      pullStartY.current = null;
+    }
+  }
+
+  function endPullRefresh(event) {
+    const startY = pullStartY.current;
+    pullStartY.current = null;
+    const endY = event.changedTouches[0]?.clientY;
+    if (startY !== null && endY - startY > 80 && !refreshing) {
+      void refreshSales({ showRefreshing: true });
+    }
+  }
 
   function selectCustomer(value) {
     setCustomerId(value);
@@ -247,6 +300,7 @@ export default function SalesDashboard({ products, userId }) {
       setCustomerName("");
       setCustomerEmail("");
       setCustomerPhone("");
+      setSaleFormOpen(false);
       await refreshSales();
       if (draftRemovalError) {
         setError(`Sale was saved, but its previous draft could not be removed: ${draftRemovalError.message}`);
@@ -300,7 +354,13 @@ export default function SalesDashboard({ products, userId }) {
   }
 
   return (
-    <div className="sales-module" id="sales-dashboard">
+    <div
+      className="sales-module"
+      id="sales-dashboard"
+      onTouchStart={startPullRefresh}
+      onTouchEnd={endPullRefresh}
+    >
+      <ConfirmDialog {...dialogProps} />
       <div className="admin-page-heading">
         <div>
           <p className="admin-eyebrow">BUSINESS MANAGEMENT</p>
@@ -308,22 +368,28 @@ export default function SalesDashboard({ products, userId }) {
           <p className="admin-muted">Cloud-backed manual sales using your Supabase product catalog.</p>
         </div>
       </div>
-      {error && <p className="admin-error" role="alert">{error}</p>}
-      {notice && <p className="admin-success" role="status">{notice}</p>}
+      {error && <AdminNotice kind="error">{error}</AdminNotice>}
+      {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
       {salesSettings?.enabled === false && (
         <p className="admin-error" role="status">Sales are disabled in Site settings. Enable the sales workspace to create new invoices.</p>
       )}
 
-      <div className="sales-summary-grid">
-        <div className="sales-metric-card"><span>Recorded sales</span><strong>{formatProductPrice(totals.revenue)}</strong><small>{sales.length} invoices in Supabase</small></div>
-        <div className="sales-metric-card"><span>Paid</span><strong>{formatProductPrice(totals.paid)}</strong><small>Payments recorded</small></div>
-        <div className="sales-metric-card"><span>Pending</span><strong>{formatProductPrice(totals.pending)}</strong><small>Outstanding balance</small></div>
-        <div className="sales-metric-card"><span>Invoices</span><strong>{sales.length}</strong><small>Persistent cloud records</small></div>
-      </div>
+      <SalesOverview
+        metrics={metrics}
+        range={metricRange}
+        onRangeChange={setMetricRange}
+        loading={loading}
+        refreshing={refreshing}
+        onRefresh={() => refreshSales({ showRefreshing: true })}
+      />
 
-      <div className="sales-layout">
+      {saleFormOpen && (
+      <div className="sales-layout" ref={saleFormRef}>
         <form className="sales-form-card" id="sales-create" onSubmit={submitSale}>
-          <div className="sales-form-header"><h2>Create {source} sale</h2><span className="sales-badge">{source}</span></div>
+          <div className="sales-form-header">
+            <div><h2>Create {source} sale</h2><span className="sales-badge">{source}</span></div>
+            <button className="sales-close-form" type="button" onClick={() => setSaleFormOpen(false)}>Close</button>
+          </div>
           <p className="admin-muted">Record a sale manually. Online entries save delivery details; storefront checkout is not connected to this sales ledger.</p>
           {!saleDraft.loaded && <p className="admin-muted" role="status">Restoring your saved sale draft...</p>}
           <fieldset className="sales-form-fields" disabled={!saleDraft.loaded}>
@@ -453,7 +519,11 @@ export default function SalesDashboard({ products, userId }) {
                 }
               }}>{saleDraft.saving ? "Saving draft..." : "Save draft now"}</button>
               <button className="admin-secondary-button" type="button" onClick={async () => {
-                if (!window.confirm("Clear this sale form and remove its saved draft?")) return;
+                if (!await confirm({
+                  title: "Clear this sale form?",
+                  description: "The saved sale draft will also be removed.",
+                  confirmLabel: "Clear sale",
+                })) return;
                 try {
                   await saleDraft.clear();
                   setCustomerId("");
@@ -478,7 +548,7 @@ export default function SalesDashboard({ products, userId }) {
               }}>Clear draft</button>
             </div>
           </div>
-          <button className="admin-primary-button" type="submit" disabled={saving || !items.length || !customerName.trim() || discountInvalid || deliveryChargeInvalid || deliveryAddressInvalid || paidAmountInvalid || salesSettings?.enabled === false}>{saving ? "Saving to Supabase..." : "Save sale and invoice"}</button>
+          <button className="admin-primary-button" type="submit" disabled={saving || !items.length || !customerName.trim() || discountInvalid || deliveryChargeInvalid || deliveryAddressInvalid || paidAmountInvalid || salesSettings?.enabled === false}>{saving ? "Saving" : "Save sale and invoice"}</button>
           </fieldset>
         </form>
 
@@ -495,7 +565,7 @@ export default function SalesDashboard({ products, userId }) {
                   <div><span>Pending</span><strong>{formatProductPrice(profileSummary.pending)}</strong></div>
                 </div>
                 <ul className="sales-profile-history">
-                  {profileSales.map((sale) => <li key={sale.id}>{sale.invoice_number} · {dateLabel(sale.created_at)} · {formatProductPrice(sale.total)}</li>)}
+                  {profileSales.map((sale) => <li key={sale.id}>{sale.invoice_number} · {formatDate(sale.created_at)} · {formatProductPrice(sale.total)}</li>)}
                 </ul>
               </>
             ) : <p className="admin-muted">Choose a customer above to view their saved purchase history. New customers are matched by email or phone.</p>}
@@ -503,11 +573,12 @@ export default function SalesDashboard({ products, userId }) {
           <div className="sales-history-card">
             <p className="admin-eyebrow">RECENT INVOICES</p>
             {sales.length ? <ul>{sales.slice(0, 5).map((sale) => (
-              <li key={sale.id}><span>{sale.invoice_number}</span><strong>{sale.customer?.name ?? "Customer"}</strong><em>{dateLabel(sale.created_at)}</em><b>{formatProductPrice(sale.total)}</b></li>
-            ))}</ul> : <p className="admin-muted">No sales recorded yet.</p>}
+              <li key={sale.id}><span>{sale.invoice_number}</span><strong>{sale.customer?.name ?? "Customer"}</strong><em>{formatDate(sale.created_at)}</em><b>{formatProductPrice(sale.total)}</b></li>
+            ))}</ul> : <AdminState description="No sales recorded yet." />}
           </div>
         </aside>
       </div>
+      )}
 
       <section className="sales-table-section" id="sales-history">
         <div className="sales-table-header">
@@ -518,7 +589,7 @@ export default function SalesDashboard({ products, userId }) {
             </select>
           </label>
         </div>
-        {loading ? <p className="admin-muted">Loading sales from Supabase...</p> : (
+        {loading ? <AdminState kind="loading" description="Loading sales from Supabase..." /> : (
           <div className="admin-table-wrap">
             <table className="admin-table sales-table">
               <thead><tr><th>Invoice</th><th>Customer</th><th>Source</th><th>Date</th><th>Total</th><th>Paid / pending</th><th>Status</th></tr></thead>
@@ -536,12 +607,35 @@ export default function SalesDashboard({ products, userId }) {
                     onDeliverySubmit={(event, details) => submitDelivery(event, sale, details)}
                   />
                 ))}
-                {!filteredSales.length && <tr><td colSpan="7" className="admin-empty">No sales match this filter yet.</td></tr>}
+                {!filteredSales.length && <tr><AdminState as="td" colSpan="7" description="No sales match this filter yet." /></tr>}
               </tbody>
             </table>
           </div>
         )}
       </section>
+      <div className={`sales-create-fab${floatingActionsVisible ? "" : " is-scroll-hidden"}`} aria-hidden={!floatingActionsVisible} inert={!floatingActionsVisible}>
+        {saleMenuOpen && (
+          <div className="sales-create-options">
+            <p>Choose a sale type</p>
+            <button type="button" aria-pressed={saleTypeChoice === "offline"} className={saleTypeChoice === "offline" ? "selected" : ""} onClick={() => setSaleTypeChoice("offline")}>
+              <strong>Offline sale</strong><span>In-store or direct orders</span>
+            </button>
+            <button type="button" aria-pressed={saleTypeChoice === "online"} className={saleTypeChoice === "online" ? "selected" : ""} onClick={() => setSaleTypeChoice("online")}>
+              <strong>Online sale</strong><span>Orders that need delivery details</span>
+            </button>
+            <button className="sales-create-proceed" type="button" onClick={() => startSale(saleTypeChoice)}>Proceed</button>
+          </div>
+        )}
+        <button
+          className="sales-create-trigger"
+          type="button"
+          aria-expanded={saleMenuOpen}
+          aria-haspopup="true"
+          onClick={toggleSaleMenu}
+        >
+          {saleMenuOpen ? "Close" : "Add sale"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -554,7 +648,7 @@ function FragmentSaleRow({ sale, expanded, paymentDraft, saving, onToggle, onPay
         <td><button type="button" className="sales-invoice-button" onClick={onToggle}>{sale.invoice_number}</button></td>
         <td>{sale.customer?.name ?? "Customer"}</td>
         <td>{sale.source}</td>
-        <td>{dateLabel(sale.created_at)}</td>
+        <td>{formatDate(sale.created_at)}</td>
         <td>{formatProductPrice(sale.total)}</td>
         <td>{formatProductPrice(sale.amount_paid)} / {formatProductPrice(pending)}</td>
         <td><span className={`sales-status sales-status-${sale.status.replace(/_/g, "-")}`}>{sale.status.replace(/_/g, " ")}</span></td>

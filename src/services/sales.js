@@ -83,6 +83,16 @@ export async function getSales() {
   return data;
 }
 
+export async function getSalesDashboardMetrics() {
+  const client = requireSupabase();
+  const { data, error } = await client.rpc("get_sales_dashboard_metrics");
+  if (error) throw error;
+  if (!data || typeof data !== "object") {
+    throw new Error("Sales dashboard metrics returned an invalid response.");
+  }
+  return data;
+}
+
 export async function createManualSale(sale) {
   const client = requireSupabase();
   const { data, error } = await client.rpc("create_manual_sale", {

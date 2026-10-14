@@ -33,6 +33,7 @@ export default function AccountMenu({ email, onSignOut }) {
       <button
         className="admin-account-trigger"
         type="button"
+        aria-label={`Account menu for ${email}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(true)}

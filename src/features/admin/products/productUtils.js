@@ -17,6 +17,7 @@ export const blankProduct = (displayOrder, sections) => ({
   defaultWhatsappMsg: "",
   isActive: true,
   displayOrder,
+  stockQuantity: 0,
 });
 
 export function slugify(value) {

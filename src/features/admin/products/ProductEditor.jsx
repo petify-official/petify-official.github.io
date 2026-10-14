@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { uploadProductImages, saveProduct } from "../../../services/admin.js";
+import { createPortal } from "react-dom";
+import { uploadProductImages, saveProduct, setProductStock } from "../../../services/admin.js";
 import { formatProductPrice } from "../../../lib/productPricing.js";
 import useWorkspaceDraft from "../../../hooks/useWorkspaceDraft.js";
 import { parseVariantPrice, slugify } from "./productUtils.js";
+import useConfirmDialog from "../../../hooks/useConfirmDialog.js";
+import ConfirmDialog from "../components/ConfirmDialog.jsx";
+import ImageUploadField from "../components/ImageUploadField.jsx";
+import AdminButton from "../components/AdminButton.jsx";
+import AdminNotice from "../components/AdminNotice.jsx";
 
 const defaultOrderMessagePrefix = "Hi Petify, I want to order ";
 
@@ -13,7 +19,17 @@ function isDefaultOrderMessage(message, title) {
   return title.startsWith(message.slice(defaultOrderMessagePrefix.length));
 }
 
+function addImageFiles(files) {
+  const selected = files.map((file) => {
+    const previewUrl = URL.createObjectURL(file);
+    previewUrls.current.add(previewUrl);
+    return { id: crypto.randomUUID(), file, previewUrl };
+  });
+  setImageItems((current) => [...current, ...selected]);
+}
+
 export default function ProductEditor({ product, draft, products, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
+  const [isEditing, setIsEditing] = useState(() => draft?.isEditing ?? Boolean(product.id));
   const initialProductState = useRef(null);
   if (!initialProductState.current) {
     initialProductState.current = {
@@ -26,6 +42,11 @@ export default function ProductEditor({ product, draft, products, sections, user
     };
   }
   const { form: initialForm, images: initialImages } = initialProductState.current;
+  const resetFormRef = useRef(initialForm);
+  const resetImagesRef = useRef(initialImages);
+  const startingFormRef = useRef({ ...initialForm, ...(draft?.form ?? {}) });
+  const startingImagesRef = useRef(draft?.images ?? initialImages);
+  const savedDraftAtOpenRef = useRef(Boolean(draft?.isSavedDraft));
   const [form, setForm] = useState(() => ({
     ...initialForm,
     ...(draft?.form ?? {}),
@@ -40,22 +61,40 @@ export default function ProductEditor({ product, draft, products, sections, user
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const isEditing = draft?.isEditing ?? Boolean(product.id);
+  const { confirm, dialogProps } = useConfirmDialog();
+  const dialogRef = useRef(null);
+  const closeButtonRef = useRef(null);
+  const cancelHandlerRef = useRef(null);
+  const currentImageUrls = imageItems.filter((item) => item.url).map((item) => item.url);
+  const isDirty = JSON.stringify(form) !== JSON.stringify(startingFormRef.current)
+    || JSON.stringify(currentImageUrls) !== JSON.stringify(startingImagesRef.current)
+    || imageItems.some((item) => item.file)
+    || recoveredPhotoCount > 0;
+  const hasData = JSON.stringify(form) !== JSON.stringify(resetFormRef.current)
+    || JSON.stringify(currentImageUrls) !== JSON.stringify(resetImagesRef.current)
+    || imageItems.some((item) => item.file)
+    || recoveredPhotoCount > 0;
   const cloudDraftKey = draft?.key ?? product.id ?? "new-product";
   const cloudDraftValue = useMemo(() => ({
     form,
     images: imageItems.filter((item) => item.url).map((item) => item.url),
   }), [form, imageItems]);
   const restoreProductDraft = useCallback((savedDraft) => {
-    if (savedDraft?.form) setForm((current) => ({ ...current, ...savedDraft.form }));
+    savedDraftAtOpenRef.current = true;
+    if (savedDraft?.form) {
+      const restoredForm = { ...initialForm, ...savedDraft.form };
+      startingFormRef.current = restoredForm;
+      setForm((current) => ({ ...current, ...savedDraft.form }));
+    }
     if (Array.isArray(savedDraft?.images)) {
+      startingImagesRef.current = savedDraft.images;
       setImageItems(savedDraft.images.map((url, index) => ({ id: `cloud-${index}`, url })));
     }
-  }, []);
+  }, [initialForm]);
   const shouldSaveProductDraft = useCallback((value) => (
     isEditing
-      ? JSON.stringify(value.form) !== JSON.stringify(initialForm)
-        || JSON.stringify(value.images) !== JSON.stringify(initialImages)
+      ? JSON.stringify(value.form) !== JSON.stringify(resetFormRef.current)
+        || JSON.stringify(value.images) !== JSON.stringify(resetImagesRef.current)
       : Boolean(
       value.form.title?.trim()
       || value.form.description?.trim()
@@ -71,7 +110,7 @@ export default function ProductEditor({ product, draft, products, sections, user
       || value.images.length
       || !value.form.isActive
       )
-  ), [initialForm, initialImages, isEditing]);
+  ), [isEditing]);
   const productDraft = useWorkspaceDraft({
     userId,
     draftType: "product",
@@ -87,14 +126,51 @@ export default function ProductEditor({ product, draft, products, sections, user
   }, []);
 
   useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        if (dialogRef.current?.querySelector('[role="alertdialog"]')) return;
+        event.preventDefault();
+        void cancelHandlerRef.current?.();
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(dialogRef.current?.querySelectorAll(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+      ) ?? [])].filter((element) => element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, []);
+
+  useEffect(() => {
     onDraftChange({
       product: { ...form, images: imageItems.filter((item) => item.url).map((item) => item.url) },
       isEditing,
+      isSavedDraft: savedDraftAtOpenRef.current,
       form,
       images: imageItems.filter((item) => item.url).map((item) => item.url),
       pendingPhotoCount: recoveredPhotoCount + imageItems.filter((item) => item.file).length,
     });
-  }, [form, imageItems, recoveredPhotoCount, onDraftChange]);
+  }, [form, imageItems, recoveredPhotoCount, onDraftChange, isEditing]);
 
   function update(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -177,6 +253,11 @@ export default function ProductEditor({ product, draft, products, sections, user
     try {
       const id = form.id.trim();
       if (!id) throw new Error("Add a product title to create its product ID.");
+      const stockText = String(form.stockQuantity ?? 0);
+      const stockQuantity = Number(stockText);
+      if (!/^\d+$/.test(stockText) || !Number.isSafeInteger(stockQuantity) || stockQuantity < 0 || stockQuantity > 2147483647) {
+        throw new Error("Stock must be a whole number of zero or more.");
+      }
       if (!isEditing && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
         throw new Error("Product IDs must use lowercase letters, numbers, and single hyphens between words.");
       }
@@ -214,7 +295,7 @@ export default function ProductEditor({ product, draft, products, sections, user
             currentFile: fileName,
             percent,
           });
-        })
+        }, { compress: true, maxSizeBytes: 10 * 1024 * 1024, maxDimension: 1800 })
         : [];
       let uploadedIndex = 0;
       const images = imageItems.map((item) => item.file ? uploaded[uploadedIndex++] : item.url);
@@ -228,6 +309,25 @@ export default function ProductEditor({ product, draft, products, sections, user
         variants,
         displayOrder: Number(form.displayOrder) || 0,
       });
+      try {
+        await setProductStock(id, stockQuantity);
+      } catch (stockError) {
+        const persistedForm = {
+          ...form,
+          id,
+          stockQuantity: isEditing ? Number(product.stockQuantity ?? 0) : 0,
+        };
+        setIsEditing(true);
+        resetFormRef.current = persistedForm;
+        resetImagesRef.current = images;
+        startingFormRef.current = persistedForm;
+        startingImagesRef.current = images;
+        savedDraftAtOpenRef.current = false;
+        await onSave({ closeEditor: false });
+        setUploadProgress(null);
+        setError(`Product details were saved, but stock could not be updated: ${stockError.message}`);
+        return;
+      }
       let draftRemovalError = null;
       try {
         await productDraft.clear();
@@ -255,7 +355,11 @@ export default function ProductEditor({ product, draft, products, sections, user
     try {
       const queuedFiles = imageItems.filter((item) => item.file);
       const uploadedImages = queuedFiles.length
-        ? await uploadProductImages("drafts", queuedFiles.map((item) => item.file))
+        ? await uploadProductImages("drafts", queuedFiles.map((item) => item.file), undefined, {
+          compress: true,
+          maxSizeBytes: 10 * 1024 * 1024,
+          maxDimension: 1800,
+        })
         : [];
       let uploadedIndex = 0;
       const images = imageItems.map((item) => item.file ? uploadedImages[uploadedIndex++] : item.url).filter(Boolean);
@@ -273,158 +377,190 @@ export default function ProductEditor({ product, draft, products, sections, user
     }
   }
 
-  async function closeEditor() {
-    if (!productDraft.loaded) return;
-    if (await saveProductDraft()) onCancel();
-  }
+  async function requestCancel() {
+    if (!productDraft.loaded || busy) return;
+    if (isDirty && !await confirm({
+      title: "Discard unsaved product changes?",
+      description: "Your changes will be discarded. Choose Save as draft to keep them for later.",
+      confirmLabel: "Discard changes",
+    })) return;
 
-  async function discardProductDraft() {
-    if (!window.confirm("Discard this product draft?")) return;
-    try {
-      await productDraft.clear();
-      await onDraftSaved?.();
-      onCancel();
-    } catch (draftError) {
-      setError(draftError.message || "Product draft could not be discarded.");
+    if (isDirty) {
+      try {
+        await productDraft.clear();
+        if (savedDraftAtOpenRef.current) {
+          await productDraft.saveNow({
+            form: startingFormRef.current,
+            images: startingImagesRef.current,
+          });
+        }
+        await onDraftSaved?.();
+      } catch (draftError) {
+        setError(draftError.message || "Unsaved product changes could not be discarded.");
+        return;
+      }
     }
+    onCancel();
   }
+  cancelHandlerRef.current = requestCancel;
 
   async function clearAllData() {
-    if (!window.confirm("Clear all unsaved product data and restore the starting values?")) return;
+    if (hasData && !await confirm({
+      title: "Clear all unsaved product data?",
+      description: "The form will return to its starting values.",
+      confirmLabel: "Clear data",
+    })) return;
     try {
       await productDraft.clear();
       imageItems.forEach((item) => {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       });
       previewUrls.current.clear();
-      setForm(initialForm);
-      setImageItems(initialImages.map((url, index) => ({ id: `existing-${index}`, url })));
+      setForm(resetFormRef.current);
+      setImageItems(resetImagesRef.current.map((url, index) => ({ id: `existing-${index}`, url })));
+      startingFormRef.current = resetFormRef.current;
+      startingImagesRef.current = resetImagesRef.current;
+      savedDraftAtOpenRef.current = false;
       setRecoveredPhotoCount(0);
       setProductIdCustomized(false);
       setError("");
-      setNotice("Unsaved product data cleared.");
+      setNotice(hasData ? "Unsaved product data cleared." : "");
       await onDraftSaved?.();
     } catch (clearError) {
       setError(clearError.message || "Product data could not be cleared.");
     }
   }
 
-  return (
-    <form className="admin-editor" onSubmit={submit}>
-      <div className="admin-editor-heading">
-        <div>
-          <p className="admin-eyebrow">{isEditing ? "EDIT PRODUCT" : "NEW PRODUCT"}</p>
-          <h2>{isEditing ? form.title : "Add a product"}</h2>
-        </div>
-      </div>
-      {recoveredPhotoCount > 0 && (
-        <p className="admin-muted" role="status">
-          Your product draft was restored, but {recoveredPhotoCount} newly selected {recoveredPhotoCount === 1 ? "photo was" : "photos were"} not retained by the browser. Please select {recoveredPhotoCount === 1 ? "it" : "them"} again before saving.
-        </p>
-      )}
-      {productDraft.error && <p className="admin-error" role="alert">{productDraft.error}</p>}
-      {productDraft.restored && <p className="admin-success" role="status">Saved product draft restored. Storefront changes remain unpublished until you publish this product.</p>}
-      <fieldset className="admin-form-grid admin-editor-fields" disabled={!productDraft.loaded || busy}>
-        <label>Store section
-          <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)} required>
-            {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
-          </select>
-        </label>
-        <label>Product type
-          <select value={form.type} onChange={(event) => update("type", event.target.value)}>
-            <option value="single">Standard product</option>
-            <option value="combo">Combo offer</option>
-          </select>
-        </label>
-        <label>Badge<input value={form.badge} onChange={(event) => update("badge", event.target.value)} required /></label>
-        <label className="admin-span-two">Product name<input value={form.title} onChange={(event) => updateTitle(event.target.value)} required /></label>
-        {isEditing ? (
-          <label>Product ID<input value={form.id} readOnly /><span className="admin-field-hint">This ID is fixed after creation because it identifies the saved product and its image folder.</span></label>
-        ) : (
-          <label className="admin-span-two">Product ID<input value={form.id} onChange={(event) => {
-            setProductIdCustomized(true);
-            update("id", event.target.value);
-          }} required aria-describedby="product-id-hint" />
-            <span className="admin-field-hint" id="product-id-hint">
-              Suggested from the product name: <strong>{slugify(form.title) || "Enter a product name"}</strong>. This unique ID identifies the product and its image folder. You can change it before saving; use lowercase letters, numbers, and hyphens.
-            </span>
-          </label>
-        )}
-        <label>Display order<input type="number" min="0" step="1" value={form.displayOrder} onChange={(event) => update("displayOrder", event.target.value)} /></label>
-        <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} required /></label>
-        {form.type === "single" && <label className="admin-span-two">Product details, one per line<textarea rows="4" value={form.specsText} onChange={(event) => update("specsText", event.target.value)} placeholder={"Material: Cotton\nSize: Medium"} /></label>}
-        {form.type === "combo" && <label>Offer tag<input value={form.saveTag} onChange={(event) => update("saveTag", event.target.value)} placeholder="SAVE ₹65" /></label>}
-        <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={Boolean(form.variantsEnabled)} onChange={(event) => toggleVariants(event.target.checked)} /> This product has purchasable varieties with different prices</label>
-        {form.variantsEnabled ? (
-          <fieldset className="product-variants-editor admin-span-two">
-            <legend>Varieties and prices</legend>
-            <p className="admin-field-hint">Add one option per size, pack quantity, or type. Keep the three gallery photos in Product photos; those are the product gallery, not separate varieties.</p>
-            {(form.variants ?? []).map((variant, index) => (
-              <div className="product-variant-row" key={variant.id}>
-                <label>Option label<input value={variant.label} onChange={(event) => updateVariant(variant.id, "label", event.target.value)} placeholder="e.g. 250 g, 500 g, Pack of 4" required /></label>
-                <label>Price (₹)<input type="text" inputMode="decimal" value={variant.price} onChange={(event) => updateVariant(variant.id, "price", event.target.value)} placeholder="1,299" required /></label>
-                <label>Previous price (₹)<input type="text" inputMode="decimal" value={variant.oldPrice ?? ""} onChange={(event) => updateVariant(variant.id, "oldPrice", event.target.value)} placeholder="Optional" /></label>
-                <button className="admin-delete-button" type="button" aria-label={`Remove variety ${index + 1}`} onClick={() => removeVariant(variant.id)}>Remove</button>
+  return createPortal(
+    <div className="admin-editor-backdrop">
+      <section className="admin-editor-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="admin-product-editor-title">
+        <form className="admin-editor" onSubmit={submit}>
+          <ConfirmDialog {...dialogProps} />
+          <div className="admin-editor-heading">
+            <div>
+              <p className="admin-eyebrow">{isEditing ? "EDIT PRODUCT" : "NEW PRODUCT"}</p>
+              <h2 id="admin-product-editor-title">{isEditing ? form.title : "Add a product"}</h2>
+            </div>
+            <AdminButton ref={closeButtonRef} aria-label="Close product editor" onClick={requestCancel} disabled={!productDraft.loaded || busy}>×</AdminButton>
+          </div>
+          {recoveredPhotoCount > 0 && (
+            <p className="admin-muted" role="status">
+              Your product draft was restored, but {recoveredPhotoCount} newly selected {recoveredPhotoCount === 1 ? "photo was" : "photos were"} not retained by the browser. Please select {recoveredPhotoCount === 1 ? "it" : "them"} again before saving.
+            </p>
+          )}
+          {productDraft.error && <AdminNotice kind="error">{productDraft.error}</AdminNotice>}
+          {productDraft.restored && <AdminNotice kind="success">Saved product draft restored. Storefront changes remain unpublished until you publish this product.</AdminNotice>}
+          <fieldset className="admin-form-grid admin-editor-fields" disabled={!productDraft.loaded || busy}>
+            <label>Store section
+              <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)} required>
+                {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
+              </select>
+            </label>
+            <label>Product type
+              <select value={form.type} onChange={(event) => update("type", event.target.value)}>
+                <option value="single">Standard product</option>
+                <option value="combo">Combo offer</option>
+              </select>
+            </label>
+            <label>Badge<input value={form.badge} onChange={(event) => update("badge", event.target.value)} required /></label>
+            <label className="admin-span-two">Product name<input value={form.title} onChange={(event) => updateTitle(event.target.value)} required /></label>
+            {isEditing ? (
+              <label>Product ID<input value={form.id} readOnly /><span className="admin-field-hint">This ID is fixed after creation because it identifies the saved product and its image folder.</span></label>
+            ) : (
+              <label className="admin-span-two">Product ID<input value={form.id} onChange={(event) => {
+                setProductIdCustomized(true);
+                update("id", event.target.value);
+              }} required aria-describedby="product-id-hint" />
+                <span className="admin-field-hint" id="product-id-hint">
+                  Suggested from the product name: <strong>{slugify(form.title) || "Enter a product name"}</strong>. This unique ID identifies the product and its image folder. You can change it before saving; use lowercase letters, numbers, and hyphens.
+                </span>
+              </label>
+            )}
+            <label>Display order<input type="number" min="0" step="1" value={form.displayOrder} onChange={(event) => update("displayOrder", event.target.value)} /></label>
+                  <label>Stock quantity<input type="number" inputMode="numeric" min="0" step="1" value={form.stockQuantity ?? 0} onChange={(event) => update("stockQuantity", event.target.value)} /></label>
+            <label className="admin-span-two">Description<textarea rows="3" value={form.description} onChange={(event) => update("description", event.target.value)} required /></label>
+            {form.type === "single" && <label className="admin-span-two">Product details, one per line<textarea rows="4" value={form.specsText} onChange={(event) => update("specsText", event.target.value)} placeholder={"Material: Cotton\nSize: Medium"} /></label>}
+            {form.type === "combo" && <label>Offer tag<input value={form.saveTag} onChange={(event) => update("saveTag", event.target.value)} placeholder="SAVE ₹65" /></label>}
+            <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={Boolean(form.variantsEnabled)} onChange={(event) => toggleVariants(event.target.checked)} /> This product has purchasable varieties with different prices</label>
+            {form.variantsEnabled ? (
+              <fieldset className="product-variants-editor admin-span-two">
+                <legend>Varieties and prices</legend>
+                <p className="admin-field-hint">Add one option per size, pack quantity, or type. Keep the three gallery photos in Product photos; those are the product gallery, not separate varieties.</p>
+                {(form.variants ?? []).map((variant, index) => (
+                  <div className="product-variant-row" key={variant.id}>
+                    <label>Option label<input value={variant.label} onChange={(event) => updateVariant(variant.id, "label", event.target.value)} placeholder="e.g. 250 g, 500 g, Pack of 4" required /></label>
+                    <label>Price (₹)<input type="text" inputMode="decimal" value={variant.price} onChange={(event) => updateVariant(variant.id, "price", event.target.value)} placeholder="1,299" required /></label>
+                    <label>Previous price (₹)<input type="text" inputMode="decimal" value={variant.oldPrice ?? ""} onChange={(event) => updateVariant(variant.id, "oldPrice", event.target.value)} placeholder="Optional" /></label>
+                    <button className="admin-delete-button" type="button" aria-label={`Remove variety ${index + 1}`} onClick={() => removeVariant(variant.id)}>Remove</button>
+                  </div>
+                ))}
+                <button className="admin-secondary-button" type="button" onClick={addVariant}>Add variety</button>
+              </fieldset>
+            ) : (
+              <>
+                <label>Price<input type="text" inputMode="decimal" value={form.price} onChange={(event) => update("price", event.target.value)} placeholder="₹1,299" /></label>
+                <label>Previous price<input type="text" inputMode="decimal" value={form.oldPrice} onChange={(event) => update("oldPrice", event.target.value)} placeholder="₹1,499" /></label>
+              </>
+            )}
+            <label className="admin-span-two">WhatsApp order message<input value={form.defaultWhatsappMsg} onChange={(event) => update("defaultWhatsappMsg", event.target.value)} required /></label>
+            <div className="admin-image-picker-actions admin-span-two">
+              <ImageUploadField
+                label="Choose photos"
+                multiple
+                maxSizeBytes={10 * 1024 * 1024}
+                hint="Select multiple photos from your library. Images are resized and compressed before upload."
+                onChange={addImageFiles}
+              />
+              <ImageUploadField
+                label="Take a photo"
+                capture="environment"
+                maxSizeBytes={10 * 1024 * 1024}
+                onChange={addImageFiles}
+              />
+            </div>
+            {imageItems.length > 0 && (
+              <div className="admin-image-list admin-span-two" aria-label="Product photo order">
+                {imageItems.map((item, index) => (
+                  <div className="admin-image-item" key={item.id}>
+                    <img src={item.previewUrl || item.url} alt={`${form.title} photo ${index + 1}`} />
+                    <span className="admin-image-order">Photo {index + 1}{item.file ? " · New" : ""}</span>
+                    <div className="admin-image-actions">
+                      <button className="admin-secondary-button" type="button" title="Move earlier" aria-label={`Move photo ${index + 1} earlier`} disabled={index === 0} onClick={() => moveImage(index, -1)}>↑</button>
+                      <button className="admin-secondary-button" type="button" title="Move later" aria-label={`Move photo ${index + 1} later`} disabled={index === imageItems.length - 1} onClick={() => moveImage(index, 1)}>↓</button>
+                      <button className="admin-remove-image-button" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => {
+                        setImageItems((current) => current.filter((_, imageIndex) => imageIndex !== index));
+                        if (item.previewUrl) {
+                          URL.revokeObjectURL(item.previewUrl);
+                          previewUrls.current.delete(item.previewUrl);
+                        }
+                      }}>Remove</button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            <button className="admin-secondary-button" type="button" onClick={addVariant}>Add variety</button>
+            )}
+            <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={form.isActive} onChange={(event) => update("isActive", event.target.checked)} /> Visible in the storefront</label>
           </fieldset>
-        ) : (
-          <>
-            <label>Price<input value={form.price} onChange={(event) => update("price", event.target.value)} placeholder="₹1,299" /></label>
-            <label>Previous price<input value={form.oldPrice} onChange={(event) => update("oldPrice", event.target.value)} placeholder="₹1,499" /></label>
-          </>
-        )}
-        <label className="admin-span-two">WhatsApp order message<input value={form.defaultWhatsappMsg} onChange={(event) => update("defaultWhatsappMsg", event.target.value)} required /></label>
-        <label className="admin-span-two">Product photos<input type="file" accept="image/*" multiple onChange={(event) => {
-          const selected = Array.from(event.target.files ?? []).map((file) => {
-            const previewUrl = URL.createObjectURL(file);
-            previewUrls.current.add(previewUrl);
-            return { id: crypto.randomUUID(), file, previewUrl };
-          });
-          setImageItems((current) => [...current, ...selected]);
-          event.target.value = "";
-        }} /><span className="admin-field-hint">Select multiple photos at once, or add more before saving.</span></label>
-        {imageItems.length > 0 && (
-          <div className="admin-image-list admin-span-two" aria-label="Product photo order">
-            {imageItems.map((item, index) => (
-              <div className="admin-image-item" key={item.id}>
-                <img src={item.previewUrl || item.url} alt={`${form.title} photo ${index + 1}`} />
-                <span className="admin-image-order">Photo {index + 1}{item.file ? " · New" : ""}</span>
-                <div className="admin-image-actions">
-                  <button className="admin-secondary-button" type="button" title="Move earlier" aria-label={`Move photo ${index + 1} earlier`} disabled={index === 0} onClick={() => moveImage(index, -1)}>↑</button>
-                  <button className="admin-secondary-button" type="button" title="Move later" aria-label={`Move photo ${index + 1} later`} disabled={index === imageItems.length - 1} onClick={() => moveImage(index, 1)}>↓</button>
-                  <button className="admin-remove-image-button" type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => {
-                    setImageItems((current) => current.filter((_, imageIndex) => imageIndex !== index));
-                    if (item.previewUrl) {
-                      URL.revokeObjectURL(item.previewUrl);
-                      previewUrls.current.delete(item.previewUrl);
-                    }
-                  }}>Remove</button>
-                </div>
+          {error && <AdminNotice kind="error">{error}</AdminNotice>}
+          {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
+          {uploadProgress && (
+            <div className="admin-upload-progress" role="status" aria-live="polite">
+              <div className="admin-upload-progress-label"><span>{uploadProgress.message}</span><span>{uploadProgress.percent}%</span></div>
+              <div className="admin-upload-progress-track" role="progressbar" aria-label="Product save progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={uploadProgress.percent}>
+                <div className="admin-upload-progress-fill" style={{ width: `${uploadProgress.percent}%` }} />
               </div>
-            ))}
+              {uploadProgress.currentFile && <p className="admin-field-hint">{uploadProgress.currentFile}</p>}
+            </div>
+          )}
+          <div className="admin-form-actions">
+            <AdminButton type="button" onClick={requestCancel} disabled={!productDraft.loaded || busy}>Cancel</AdminButton>
+            <AdminButton type="button" onClick={clearAllData} disabled={busy || !productDraft.loaded}>{isEditing ? "Reset changes" : "Clear all"}</AdminButton>
+            {!isEditing && <AdminButton type="button" onClick={async () => { if (await saveProductDraft()) onCancel(); }} disabled={!productDraft.loaded || busy}>{productDraft.saving || busy ? "Saving draft..." : "Save as draft"}</AdminButton>}
+            <AdminButton variant="primary" type="submit" disabled={busy || !productDraft.loaded}>{busy ? "Saving product..." : isEditing ? "Save changes" : "Save product (Publish)"}</AdminButton>
           </div>
-        )}
-        <label className="admin-checkbox admin-span-two"><input type="checkbox" checked={form.isActive} onChange={(event) => update("isActive", event.target.checked)} /> Visible in the storefront</label>
-      </fieldset>
-      {error && <p className="admin-error" role="alert">{error}</p>}
-      {notice && <p className="admin-success" role="status">{notice}</p>}
-      {uploadProgress && (
-        <div className="admin-upload-progress" role="status" aria-live="polite">
-          <div className="admin-upload-progress-label"><span>{uploadProgress.message}</span><span>{uploadProgress.percent}%</span></div>
-          <div className="admin-upload-progress-track" role="progressbar" aria-label="Product save progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={uploadProgress.percent}>
-            <div className="admin-upload-progress-fill" style={{ width: `${uploadProgress.percent}%` }} />
-          </div>
-          {uploadProgress.currentFile && <p className="admin-field-hint">{uploadProgress.currentFile}</p>}
-        </div>
-      )}
-      <div className="admin-form-actions">
-        <button className="admin-secondary-button" type="button" onClick={clearAllData} disabled={busy || !productDraft.loaded}>Reset</button>
-        <button className="admin-secondary-button" type="button" onClick={discardProductDraft} disabled={busy || !productDraft.loaded}>Discard product</button>
-        <button className="admin-primary-button" type="submit" disabled={busy || !productDraft.loaded}>{busy ? "Saving product..." : "Publish product"}</button>
-        <button className="admin-secondary-button" type="button" onClick={closeEditor} disabled={!productDraft.loaded || busy}>{productDraft.saving ? "Saving draft..." : "Save as draft"}</button>
-      </div>
-    </form>
+        </form>
+      </section>
+    </div>,
+    document.body,
   );
 }

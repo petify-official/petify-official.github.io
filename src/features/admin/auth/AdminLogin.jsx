@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../../../lib/supabase.js";
+import AdminNotice from "../components/AdminNotice.jsx";
+import AdminButton from "../components/AdminButton.jsx";
 
 export default function AdminLogin({
   adminBrand,
@@ -33,8 +35,8 @@ export default function AdminLogin({
       <p className="admin-muted">{description}</p>
       <label>Email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
       <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-      {error && <p className="admin-error" role="alert">{error}</p>}
-      <button className="admin-primary-button" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</button>
+      {error && <AdminNotice kind="error">{error}</AdminNotice>}
+      <AdminButton variant="primary" type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</AdminButton>
       <a className="admin-back-link" href={backHref}>Back to storefront</a>
     </form>
   );

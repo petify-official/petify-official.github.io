@@ -15,9 +15,10 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 3. Run `supabase/admin.sql` to create the admin role, product write policies, and public image bucket.
 4. Run `supabase/catalog-sections.sql` to add configurable storefront sections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, and storefront visibility. Rerun this script after updates to apply later additions; it is safe to rerun.
 5. Run `supabase/sales.sql` to enable the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. Run it after `admin.sql` and `catalog-sections.sql`; it is safe to rerun.
-6. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
-7. In Supabase Authentication, create your account. Do not enable public sign-ups.
-8. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
+6. Run `supabase/inventory-dashboard.sql` after `sales.sql` to add admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales. This script is safe to rerun.
+7. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
+8. In Supabase Authentication, create your account. Do not enable public sign-ups.
+9. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
 
    ```sql
    insert into public.admin_users (user_id)
@@ -49,6 +50,51 @@ The React UI is kept separate from catalog access: `src/services/catalog.js` own
 - `src/lib/` contains shared Supabase and product-pricing utilities.
 
 Admin, sign-in, sales, site settings, and product editing are lazy-loaded as separate chunks; storefront users do not need to download the admin workspace.
+
+## Admin shared components
+
+Shared admin UI lives in `src/features/admin/components/`; session and confirmation hooks live in `src/hooks/`. Examples:
+
+```jsx
+import AdminButton from "./components/AdminButton.jsx";
+import AdminNotice from "./components/AdminNotice.jsx";
+import AdminState from "./components/AdminState.jsx";
+
+<AdminButton variant="primary" type="submit" disabled={saving}>
+  {saving ? "Saving..." : "Save"}
+</AdminButton>
+{error && <AdminNotice kind="error">{error}</AdminNotice>}
+{loading && <AdminState kind="loading" description="Loading products..." />}
+```
+
+For a destructive action, call `useConfirmDialog()` and render its dialog once in the component:
+
+```jsx
+import useConfirmDialog from "../../hooks/useConfirmDialog.js";
+import ConfirmDialog from "./components/ConfirmDialog.jsx";
+
+const { confirm, dialogProps } = useConfirmDialog();
+
+async function removeItem() {
+  if (!await confirm({ title: "Delete this item?", confirmLabel: "Delete" })) return;
+  await deleteItem();
+}
+
+<ConfirmDialog {...dialogProps} />
+```
+
+`ImageUploadField` forwards selected files to `onChange(files)` and can optionally limit file size:
+
+```jsx
+<ImageUploadField
+  label="Product photos"
+  multiple
+  maxSizeBytes={5 * 1024 * 1024}
+  onChange={(files) => setSelectedFiles(files)}
+/>
+```
+
+`useWorkspaceSession()` shares Supabase session restoration and expiration handling; role authorization remains explicit at each entry point and protected data remains enforced by RLS.
 
 ## Build
 

@@ -1,10 +1,19 @@
 import { useState } from "react";
+import useConfirmDialog from "../../hooks/useConfirmDialog.js";
+import ConfirmDialog from "./components/ConfirmDialog.jsx";
+import AdminNotice from "./components/AdminNotice.jsx";
+import AdminButton from "./components/AdminButton.jsx";
 
 export default function WorkspaceDraftControls({ draft, label = "changes", onSave, onDiscard, canSave = true }) {
   const [actionError, setActionError] = useState("");
+  const { confirm, dialogProps } = useConfirmDialog();
 
   async function discard() {
-    if (!window.confirm(`Discard the saved ${label} draft?`)) return;
+    if (!await confirm({
+      title: `Discard the saved ${label} draft?`,
+      description: "This saved draft will be removed.",
+      confirmLabel: "Discard draft",
+    })) return;
     try {
       await (onDiscard ? onDiscard() : draft.clear());
       setActionError("");
@@ -24,15 +33,16 @@ export default function WorkspaceDraftControls({ draft, label = "changes", onSav
 
   return (
     <div className="workspace-draft-controls">
+      <ConfirmDialog {...dialogProps} />
       <span className="admin-muted" role="status">
         {draft.saving ? "Saving draft..." : draft.restored ? "Cloud draft saved" : "Changes autosave as a draft"}
       </span>
-      {draft.error && <span className="admin-error" role="alert">{draft.error}</span>}
-      {actionError && <span className="admin-error" role="alert">{actionError}</span>}
-      <button className="admin-secondary-button" type="button" disabled={draft.saving || !canSave} onClick={save}>
+      {draft.error && <AdminNotice as="span" kind="error">{draft.error}</AdminNotice>}
+      {actionError && <AdminNotice as="span" kind="error">{actionError}</AdminNotice>}
+      <AdminButton disabled={draft.saving || !canSave} onClick={save}>
         {draft.saving ? "Saving draft..." : "Save as draft"}
-      </button>
-      {draft.restored && <button className="admin-secondary-button" type="button" onClick={discard}>Discard draft</button>}
+      </AdminButton>
+      {draft.restored && <AdminButton onClick={discard}>Discard draft</AdminButton>}
     </div>
   );
 }

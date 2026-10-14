@@ -15,13 +15,30 @@ import {
 } from "../../services/admin.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
+import ImageUploadField from "./components/ImageUploadField.jsx";
+import AdminButton from "./components/AdminButton.jsx";
+import AdminNotice from "./components/AdminNotice.jsx";
+import AdminState from "./components/AdminState.jsx";
+import useObjectUrl from "../../hooks/useObjectUrl.js";
 
 export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, sections, products }) {
   const [storeLogo, setStoreLogo] = useState("");
   const [storeFavicon, setStoreFavicon] = useState("");
   const [heroPills, setHeroPills] = useState([]);
   const [logoFile, setLogoFile] = useState(null);
+  const [logoCrop, setLogoCrop] = useState({ aspect: "fit", x: 50, y: 50 });
   const [faviconFile, setFaviconFile] = useState(null);
+  const logoPreview = useObjectUrl(logoFile);
+  const faviconPreview = useObjectUrl(faviconFile);
+  const logoImageOptions = {
+    ...(logoCrop.aspect === "wide" ? { cropAspectRatio: 3 } : {}),
+    ...(logoCrop.aspect === "square" ? { cropAspectRatio: 1 } : {}),
+    cropFocusX: logoCrop.x,
+    cropFocusY: logoCrop.y,
+  };
+  const logoPreviewClass = logoFile && logoCrop.aspect !== "fit"
+    ? `admin-logo-crop-preview admin-logo-crop-preview-${logoCrop.aspect}`
+    : "admin-logo-crop-preview";
   const [savingLogo, setSavingLogo] = useState(false);
   const [savingFavicon, setSavingFavicon] = useState(false);
   const [savingHeroPills, setSavingHeroPills] = useState(false);
@@ -79,8 +96,9 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
     setError("");
     setNotice("");
     try {
-      setStoreLogo(await updateStoreLogo(logoFile));
+      setStoreLogo(await updateStoreLogo(logoFile, logoImageOptions));
       setLogoFile(null);
+      setLogoCrop({ aspect: "fit", x: 50, y: 50 });
       form.reset();
       try {
         await logoDraft.clear();
@@ -153,9 +171,14 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
     }
   }
 
-  async function saveAssetDraft(file, setUrl, draft) {
+  async function saveAssetDraft(file, setUrl, draft, imageOptions = {}) {
     if (!file) throw new Error("Select an image before saving this asset draft.");
-    const [url] = await uploadProductImages("drafts", [file]);
+    const [url] = await uploadProductImages("drafts", [file], undefined, {
+      compress: true,
+      maxSizeBytes: 5 * 1024 * 1024,
+      maxDimension: 1400,
+      ...imageOptions,
+    });
     setUrl(url);
     await draft.saveNow({ url });
   }
@@ -190,36 +213,66 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
     }
   }
 
-  if (loading) return <p className="admin-muted">Loading site settings...</p>;
+  if (loading) return <AdminState kind="loading" description="Loading site settings..." />;
 
   return (
     <div className="admin-site-settings">
-      {error && <p className="admin-error" role="alert">{error}</p>}
-      {notice && <p className="admin-success" role="status">{notice}</p>}
-      <StorefrontContentEditor userId={userId} />
-      <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={userId} />
-      <SalesSettings userId={userId} />
+      {error && <AdminNotice kind="error">{error}</AdminNotice>}
+      {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
+      <details className="admin-settings-group" open>
+        <summary>Branding and storefront</summary>
+        <div className="admin-settings-group-content">
+          <StorefrontContentEditor userId={userId} />
       <section className="admin-settings-block" aria-labelledby="admin-logo-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-logo-settings-title">Store logo</h2></div></div>
         <form className="admin-store-logo" onSubmit={submitLogo}>
-          {storeLogo ? <img src={storeLogo} alt="Current store logo" /> : <span className="admin-store-logo-empty">No logo uploaded</span>}
-          <label>Upload logo<input type="file" accept="image/*" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} /></label>
+          {logoPreview || storeLogo ? (
+            <span className={logoPreviewClass}>
+              <img
+                src={logoPreview || storeLogo}
+                alt={logoPreview ? "Selected store logo preview" : "Current store logo"}
+                style={logoPreview && logoCrop.aspect !== "fit" ? { objectPosition: `${logoCrop.x}% ${logoCrop.y}%` } : undefined}
+              />
+            </span>
+          ) : <span className="admin-store-logo-empty">No logo uploaded</span>}
+          <ImageUploadField label="Upload logo" accept="image/jpeg,image/png,image/webp" maxSizeBytes={5 * 1024 * 1024} hint="JPEG, PNG, or WebP. Resized and compressed before upload; 5 MB maximum." onChange={(files) => setLogoFile(files[0] ?? null)} />
+          {logoFile && (
+            <div className="admin-logo-crop-controls">
+              <label>Image framing
+                <select value={logoCrop.aspect} onChange={(event) => setLogoCrop((current) => ({ ...current, aspect: event.target.value }))}>
+                  <option value="fit">Keep full image</option>
+                  <option value="wide">Crop wide (3:1)</option>
+                  <option value="square">Crop square (1:1)</option>
+                </select>
+              </label>
+              {logoCrop.aspect !== "fit" && (
+                <>
+                  <label>Horizontal crop position
+                    <input type="range" min="0" max="100" value={logoCrop.x} onChange={(event) => setLogoCrop((current) => ({ ...current, x: Number(event.target.value) }))} />
+                  </label>
+                  <label>Vertical crop position
+                    <input type="range" min="0" max="100" value={logoCrop.y} onChange={(event) => setLogoCrop((current) => ({ ...current, y: Number(event.target.value) }))} />
+                  </label>
+                </>
+              )}
+            </div>
+          )}
           <div className="admin-form-actions">
-            <WorkspaceDraftControls draft={logoDraft} label="store logo" canSave={Boolean(logoFile)} onSave={() => saveAssetDraft(logoFile, setStoreLogo, logoDraft)} />
-            {logoDraft.restored && <button className="admin-primary-button" type="button" onClick={applyLogoDraft}>Apply saved logo</button>}
-            <button className="admin-primary-button" type="submit" disabled={savingLogo || !logoFile}>{savingLogo ? "Uploading..." : "Apply logo"}</button>
+            <WorkspaceDraftControls draft={logoDraft} label="store logo" canSave={Boolean(logoFile)} onSave={() => saveAssetDraft(logoFile, setStoreLogo, logoDraft, logoImageOptions)} />
+            {logoDraft.restored && <AdminButton variant="primary" onClick={applyLogoDraft}>Apply saved logo</AdminButton>}
+            <AdminButton variant="primary" type="submit" disabled={savingLogo || !logoFile}>{savingLogo ? "Uploading..." : "Apply logo"}</AdminButton>
           </div>
         </form>
       </section>
       <section className="admin-settings-block" aria-labelledby="admin-favicon-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-favicon-settings-title">Browser favicon</h2></div></div>
         <form className="admin-store-logo" onSubmit={submitFavicon}>
-          {storeFavicon ? <img src={storeFavicon} alt="Current browser favicon" /> : <span className="admin-store-logo-empty">Default icon</span>}
-          <label>Upload favicon<input type="file" accept="image/*,.ico" onChange={(event) => setFaviconFile(event.target.files?.[0] ?? null)} /></label>
+          {faviconPreview || storeFavicon ? <img src={faviconPreview || storeFavicon} alt={faviconPreview ? "Selected favicon preview" : "Current browser favicon"} /> : <span className="admin-store-logo-empty">Default icon</span>}
+          <ImageUploadField label="Upload favicon" accept="image/*,.ico" maxSizeBytes={2 * 1024 * 1024} onChange={(files) => setFaviconFile(files[0] ?? null)} />
           <div className="admin-form-actions">
             <WorkspaceDraftControls draft={faviconDraft} label="favicon" canSave={Boolean(faviconFile)} onSave={() => saveAssetDraft(faviconFile, setStoreFavicon, faviconDraft)} />
-            {faviconDraft.restored && <button className="admin-primary-button" type="button" onClick={applyFaviconDraft}>Apply saved favicon</button>}
-            <button className="admin-primary-button" type="submit" disabled={savingFavicon || !faviconFile}>{savingFavicon ? "Uploading..." : "Apply favicon"}</button>
+            {faviconDraft.restored && <AdminButton variant="primary" onClick={applyFaviconDraft}>Apply saved favicon</AdminButton>}
+            <AdminButton variant="primary" type="submit" disabled={savingFavicon || !faviconFile}>{savingFavicon ? "Uploading..." : "Apply favicon"}</AdminButton>
           </div>
         </form>
       </section>
@@ -251,6 +304,20 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
           </div>
         </form>
       </section>
+        </div>
+      </details>
+      <details className="admin-settings-group">
+        <summary>Colors and appearance</summary>
+        <div className="admin-settings-group-content">
+          <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={userId} />
+        </div>
+      </details>
+      <details className="admin-settings-group">
+        <summary>General and Sales</summary>
+        <div className="admin-settings-group-content">
+          <SalesSettings userId={userId} />
+        </div>
+      </details>
     </div>
   );
 }
