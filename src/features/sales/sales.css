@@ -1009,6 +1009,7 @@
   }
 
   .sales-table-section .admin-table-wrap {
+    display: block;
     overflow: visible;
     border: 0;
     background: transparent;
