@@ -73,6 +73,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const [addingSection, setAddingSection] = useState(false);
   const [createActionsOpen, setCreateActionsOpen] = useState(false);
   const [sectionTitle, setSectionTitle] = useState("");
+  const [newSubsectionMainSectionId, setNewSubsectionMainSectionId] = useState("");
   const [creatingSection, setCreatingSection] = useState(false);
   const [savingSectionOrder, setSavingSectionOrder] = useState(false);
   const [savingMainSectionOrder, setSavingMainSectionOrder] = useState(false);
@@ -99,6 +100,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const finalizingDeleteRef = useRef(false);
   const { confirm, dialogProps } = useConfirmDialog();
   const floatingActionsVisible = useScrollAwareVisibility();
+  const createFabVisible = floatingActionsVisible || createActionsOpen || addingSection || addingMainSection;
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLocaleLowerCase();
     const matches = products.filter((product) => {
@@ -215,10 +217,17 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     setCreatingSection(true);
     setError("");
     try {
-      await createCatalogSection({ id, title, displayOrder: sections.length + 1 });
+      await createCatalogSection({
+        id,
+        title,
+        displayOrder: sections.length + 1,
+        mainSectionId: newSubsectionMainSectionId,
+      });
       setSections(await getAdminSections());
       setSectionTitle("");
+      setNewSubsectionMainSectionId("");
       setAddingSection(false);
+      setCreateActionsOpen(false);
     } catch (createError) {
       setError(createError.message || "The section could not be created.");
     } finally {
@@ -242,6 +251,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
       setMainSections(await getAdminMainSections());
       setMainSectionTitle("");
       setAddingMainSection(false);
+      setCreateActionsOpen(false);
     } catch (createError) {
       setError(createError.message || "The main section could not be created.");
     } finally {
@@ -571,23 +581,50 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               <div className="admin-page-heading">
                 <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Organize products into subsections and optional main sections.</p></div>
               </div>
-              <div className={`admin-create-fab${floatingActionsVisible ? "" : " is-scroll-hidden"}`} aria-hidden={!floatingActionsVisible} inert={!floatingActionsVisible}>
-                {addingSection ? (
-                  <form className="admin-section-form admin-section-fab-form" onSubmit={addSection}>
+              <div className={`admin-create-fab${createFabVisible ? "" : " is-scroll-hidden"}`} aria-hidden={!createFabVisible} inert={!createFabVisible}>
+                {addingMainSection ? (
+                  <form className="admin-create-form admin-section-form admin-section-fab-form" onSubmit={addMainSection}>
                     <div className="admin-section-fab-heading">
-                      <strong>New subsection</strong>
-                      <AdminButton aria-label="Close new section form" onClick={() => { setAddingSection(false); setSectionTitle(""); }}>×</AdminButton>
+                      <div><small>CATALOG ORGANIZATION</small><strong>New main section</strong></div>
+                      <AdminButton aria-label="Close new main section form" onClick={() => { setAddingMainSection(false); setMainSectionTitle(""); }}>×</AdminButton>
+                    </div>
+                    <label>Main section name<input autoFocus value={mainSectionTitle} onChange={(event) => setMainSectionTitle(event.target.value)} placeholder="Food, habitats, accessories..." required /></label>
+                    <p className="admin-create-hint">You can assign subsections to it after creating it.</p>
+                    <div className="admin-create-form-actions">
+                      <button className="admin-primary-button" type="submit" disabled={creatingMainSection}>{creatingMainSection ? "Creating..." : "Create main section"}</button>
+                      <button className="admin-secondary-button" type="button" onClick={() => { setAddingMainSection(false); setMainSectionTitle(""); }}>Cancel</button>
+                    </div>
+                  </form>
+                ) : addingSection ? (
+                  <form className="admin-create-form admin-section-form admin-section-fab-form" onSubmit={addSection}>
+                    <div className="admin-section-fab-heading">
+                      <div><small>CATALOG ORGANIZATION</small><strong>New subsection</strong></div>
+                      <AdminButton aria-label="Close new subsection form" onClick={() => { setAddingSection(false); setSectionTitle(""); setNewSubsectionMainSectionId(""); }}>×</AdminButton>
                     </div>
                     <label>Subsection name<input autoFocus value={sectionTitle} onChange={(event) => setSectionTitle(event.target.value)} placeholder="Dry food, toys, cages..." required /></label>
-                    <button className="admin-primary-button" type="submit" disabled={creatingSection}>{creatingSection ? "Creating..." : "Create subsection"}</button>
-                    <button className="admin-secondary-button" type="button" onClick={() => { setAddingSection(false); setSectionTitle(""); }}>Cancel</button>
+                    <label>Main section <span className="admin-create-optional">Optional</span>
+                      <select value={newSubsectionMainSectionId} onChange={(event) => setNewSubsectionMainSectionId(event.target.value)}>
+                        <option value="">Keep standalone</option>
+                        {mainSections.map((mainSection) => <option key={mainSection.id} value={mainSection.id}>{mainSection.title}</option>)}
+                      </select>
+                    </label>
+                    <p className="admin-create-hint">You can change this later from the subsection list.</p>
+                    <div className="admin-create-form-actions">
+                      <button className="admin-primary-button" type="submit" disabled={creatingSection}>{creatingSection ? "Creating..." : "Create subsection"}</button>
+                      <button className="admin-secondary-button" type="button" onClick={() => { setAddingSection(false); setSectionTitle(""); setNewSubsectionMainSectionId(""); }}>Cancel</button>
+                    </div>
                   </form>
                 ) : (
                   <>
                     {createActionsOpen && (
                       <div className="admin-create-menu" role="group" aria-label="Create catalog item">
+                        <div className="admin-create-menu-heading">
+                          <strong>What are we adding?</strong>
+                          <span>Build your catalog, one layer at a time.</span>
+                        </div>
                         <AdminButton
                           variant="primary"
+                          className="admin-create-action"
                           disabled={!sections.length}
                           onClick={() => {
                             const product = blankProduct(products.length + 1, sections);
@@ -595,10 +632,17 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                             saveEditorDraft({ key: `new-${crypto.randomUUID()}`, isEditing: false, product, form: product, images: [], pendingPhotoCount: 0 });
                           }}
                         >
-                          Add product
+                          <span className="admin-create-action-icon" aria-hidden="true">+</span>
+                          <span><strong>Add product</strong><small>{sections.length ? "Add an item to a subsection" : "Create a subsection first"}</small></span>
                         </AdminButton>
-                        {!sections.length && <span>Create a section before adding products.</span>}
-                        <AdminButton onClick={() => { setCreateActionsOpen(false); setAddingSection(true); }}>New subsection</AdminButton>
+                        <AdminButton className="admin-create-action" onClick={() => { setCreateActionsOpen(false); setAddingSection(true); }}>
+                          <span className="admin-create-action-icon" aria-hidden="true">≡</span>
+                          <span><strong>New subsection</strong><small>Group products by type</small></span>
+                        </AdminButton>
+                        <AdminButton className="admin-create-action" onClick={() => { setCreateActionsOpen(false); setAddingMainSection(true); }}>
+                          <span className="admin-create-action-icon" aria-hidden="true">▤</span>
+                          <span><strong>New main section</strong><small>Group related subsections</small></span>
+                        </AdminButton>
                       </div>
                     )}
                     <AdminButton
@@ -660,23 +704,21 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                     <h2 id="admin-main-section-order-title">Main sections</h2>
                     <p className="admin-muted">Group related subsections. Subsections without a main section stay standalone.</p>
                   </div>
-                  <AdminButton onClick={() => setAddingMainSection((current) => !current)}>{addingMainSection ? "Cancel" : "New main section"}</AdminButton>
+                  <span className="admin-section-count">{mainSections.length} {mainSections.length === 1 ? "section" : "sections"}</span>
                 </div>
-                {addingMainSection && (
-                  <form className="admin-main-section-form" onSubmit={addMainSection}>
-                    <label>Main section name<input autoFocus value={mainSectionTitle} onChange={(event) => setMainSectionTitle(event.target.value)} placeholder="Food, habitats, accessories..." required /></label>
-                    <button className="admin-primary-button" type="submit" disabled={creatingMainSection}>{creatingMainSection ? "Creating..." : "Create main section"}</button>
-                  </form>
-                )}
-                {mainSections.length > 0 && (
+                {loading ? <p className="admin-empty-sections">Loading main sections...</p> : mainSections.length > 0 ? (
                   <ol>
                     {mainSections.map((mainSection, index) => (
                       <li key={mainSection.id}>
                         {editingMainSectionId === mainSection.id ? (
                           <form className="admin-section-rename" onSubmit={(event) => saveMainSectionTitle(event, mainSection)}>
-                            <input aria-label={`Rename ${mainSection.title}`} value={editingMainSectionTitle} onChange={(event) => setEditingMainSectionTitle(event.target.value)} required />
-                            <button className="admin-primary-button" type="submit">Save</button>
-                            <button className="admin-secondary-button" type="button" onClick={() => setEditingMainSectionId("")}>Cancel</button>
+                            <label>Main section name
+                              <input aria-label={`Rename ${mainSection.title}`} value={editingMainSectionTitle} onChange={(event) => setEditingMainSectionTitle(event.target.value)} required />
+                            </label>
+                            <div className="admin-section-edit-actions">
+                              <button className="admin-primary-button" type="submit">Save changes</button>
+                              <button className="admin-secondary-button" type="button" onClick={() => setEditingMainSectionId("")}>Cancel</button>
+                            </div>
                           </form>
                         ) : (
                           <>
@@ -684,7 +726,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                             <span className="admin-section-order-actions">
                               <button className="admin-secondary-button admin-order-arrow" type="button" title="Move main section earlier" aria-label={`Move ${mainSection.title} earlier`} disabled={savingMainSectionOrder || index === 0} onClick={() => moveMainSection(index, -1)}>↑</button>
                               <button className="admin-secondary-button admin-order-arrow" type="button" title="Move main section later" aria-label={`Move ${mainSection.title} later`} disabled={savingMainSectionOrder || index === mainSections.length - 1} onClick={() => moveMainSection(index, 1)}>↓</button>
-                              <button className="admin-secondary-button" type="button" onClick={() => { setEditingMainSectionId(mainSection.id); setEditingMainSectionTitle(mainSection.title); }}>Rename</button>
+                              <button className="admin-secondary-button" type="button" onClick={() => { setEditingSectionId(""); setEditingMainSectionId(mainSection.id); setEditingMainSectionTitle(mainSection.title); }}>Edit</button>
                               <button className="admin-delete-button" type="button" onClick={() => removeMainSection(mainSection)}>Delete</button>
                             </span>
                           </>
@@ -692,19 +734,29 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                       </li>
                     ))}
                   </ol>
-                )}
+                ) : <p className="admin-empty-sections">No main sections yet. Use <strong>Create</strong> to make a top-level group.</p>}
               </section>
-              {sections.length > 0 && (
-                <section className="admin-section-order" aria-labelledby="admin-section-order-title">
-                  <h2 id="admin-section-order-title">Subsections</h2>
+              <section className="admin-section-order" aria-labelledby="admin-section-order-title">
+                  <div className="admin-section-order-heading">
+                    <div>
+                      <h2 id="admin-section-order-title">Subsections</h2>
+                      <p className="admin-muted">Assign each subsection to a main section, or keep it standalone.</p>
+                    </div>
+                    <span className="admin-section-count">{sections.length} {sections.length === 1 ? "subsection" : "subsections"}</span>
+                  </div>
+                  {loading ? <p className="admin-empty-sections">Loading subsections...</p> : sections.length > 0 ? (
                   <ol>
                     {sections.map((section, index) => (
                       <li key={section.id}>
                         {editingSectionId === section.id ? (
                           <form className="admin-section-rename" onSubmit={(event) => saveSectionTitle(event, section)}>
-                            <input aria-label={`Rename ${section.title}`} value={editingSectionTitle} onChange={(event) => setEditingSectionTitle(event.target.value)} required />
-                            <button className="admin-primary-button" type="submit">Save</button>
-                            <button className="admin-secondary-button" type="button" onClick={() => setEditingSectionId("")}>Cancel</button>
+                            <label>Subsection name
+                              <input aria-label={`Rename ${section.title}`} value={editingSectionTitle} onChange={(event) => setEditingSectionTitle(event.target.value)} required />
+                            </label>
+                            <div className="admin-section-edit-actions">
+                              <button className="admin-primary-button" type="submit">Save changes</button>
+                              <button className="admin-secondary-button" type="button" onClick={() => setEditingSectionId("")}>Cancel</button>
+                            </div>
                           </form>
                         ) : (
                           <>
@@ -719,7 +771,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                             <span className="admin-section-order-actions">
                               <button className="admin-secondary-button admin-order-arrow" type="button" title="Move section earlier" aria-label={`Move ${section.title} earlier`} disabled={savingSectionOrder || index === 0} onClick={() => moveSection(index, -1)}>↑</button>
                               <button className="admin-secondary-button admin-order-arrow" type="button" title="Move section later" aria-label={`Move ${section.title} later`} disabled={savingSectionOrder || index === sections.length - 1} onClick={() => moveSection(index, 1)}>↓</button>
-                              <button className="admin-secondary-button" type="button" onClick={() => { setEditingSectionId(section.id); setEditingSectionTitle(section.title); }}>Rename</button>
+                              <button className="admin-secondary-button" type="button" onClick={() => { setEditingMainSectionId(""); setEditingSectionId(section.id); setEditingSectionTitle(section.title); }}>Edit</button>
                               <button className="admin-delete-button" type="button" disabled={products.some((product) => product.sectionId === section.id)} title={products.some((product) => product.sectionId === section.id) ? "Move or delete assigned products first" : "Delete section"} onClick={() => removeSection(section)}>Delete</button>
                             </span>
                           </>
@@ -727,8 +779,8 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                       </li>
                     ))}
                   </ol>
-                </section>
-              )}
+                  ) : <p className="admin-empty-sections">No subsections yet. Use <strong>Create</strong> to add one.</p>}
+              </section>
               {error && <AdminNotice kind="error">{error}</AdminNotice>}
               {loading ? <AdminState kind="loading" description="Loading products..." /> : (
                 <div className="admin-table-wrap">

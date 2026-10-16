@@ -113,11 +113,18 @@ export async function getSalesDashboardMetrics() {
 
 export async function createManualSale(sale) {
   const client = requireSupabase();
+  const items = sale.items.filter((item) => item.quantity !== 0);
+  if (!items.length) {
+    throw new Error("Add at least one product with a quantity greater than zero.");
+  }
+  if (items.some((item) => !Number.isSafeInteger(item.quantity) || item.quantity < 1)) {
+    throw new Error("Product quantities must be whole numbers greater than zero.");
+  }
   const { data, error } = await client.rpc("create_manual_sale", {
     p_customer_name: sale.customer.name,
     p_customer_email: sale.customer.email || null,
     p_customer_phone: sale.customer.phone || null,
-    p_items: sale.items.map((item) => ({
+    p_items: items.map((item) => ({
       product_id: item.productId,
       variant_id: item.variantId || null,
       quantity: item.quantity,

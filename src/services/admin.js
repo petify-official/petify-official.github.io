@@ -185,6 +185,7 @@ export async function createCatalogSection(section) {
     id: section.id,
     title: section.title,
     display_order: section.displayOrder,
+    main_section_id: section.mainSectionId || null,
   });
   if (error) throw error;
 }

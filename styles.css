@@ -1466,6 +1466,8 @@ td.admin-state-empty {
 .admin-create-menu,
 .admin-section-fab-form {
   width: min(22rem, calc(100vw - 2rem));
+  max-height: min(70dvh, 34rem);
+  overflow-y: auto;
   padding: 0.85rem;
   border: 1px solid var(--admin-border);
   border-radius: var(--admin-radius-lg);
@@ -1475,17 +1477,75 @@ td.admin-state-empty {
 
 .admin-create-menu {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
+}
+
+.admin-create-menu-heading {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.15rem 0.2rem 0.45rem;
+}
+
+.admin-create-menu-heading strong {
+  color: var(--text-dark);
+  font-size: 0.98rem;
+}
+
+.admin-create-menu-heading span,
+.admin-create-action small,
+.admin-create-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.admin-create-menu > button.admin-create-action {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: var(--admin-radius-sm);
+  text-align: left;
+}
+
+.admin-create-action > span:last-child {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.admin-create-action strong {
+  font-size: 0.88rem;
+}
+
+.admin-create-action small {
+  font-weight: 400;
+}
+
+.admin-create-action-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.admin-create-menu > button:disabled {
+  opacity: 0.62;
+}
+
+.admin-create-menu > button:disabled .admin-create-action-icon {
+  opacity: 0.75;
 }
 
 .admin-create-menu > button,
 .admin-section-fab-form > button {
   min-height: 44px;
-}
-
-.admin-create-menu > span {
-  color: var(--text-muted);
-  font-size: 0.82rem;
 }
 
 .admin-section-fab-form {
@@ -1495,12 +1555,32 @@ td.admin-state-empty {
   margin: 0;
 }
 
+.admin-section-fab-form .admin-section-fab-heading {
+  align-items: flex-start;
+}
+
 .admin-section-fab-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   color: var(--text-dark);
+}
+
+.admin-section-fab-heading > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.admin-section-fab-heading small {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.admin-section-fab-heading strong {
+  font-size: 1rem;
 }
 
 .admin-section-fab-heading > button {
@@ -1517,6 +1597,38 @@ td.admin-state-empty {
 .admin-section-fab-form input {
   min-height: 44px;
   font-size: 16px;
+}
+
+.admin-section-fab-form select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-dark);
+  font: inherit;
+  font-size: 16px;
+}
+
+.admin-create-optional {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.admin-create-hint {
+  margin: -0.25rem 0 0;
+}
+
+.admin-create-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-create-form-actions > button {
+  width: auto;
+  flex: 1;
+  min-height: 44px;
 }
 
 .admin-color-palette {
@@ -1883,20 +1995,22 @@ td.admin-state-empty {
   margin: 0.25rem 0 0;
 }
 
+.admin-section-count {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid #dbe3ea;
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 .admin-section-order-heading button {
   width: auto;
   min-width: 0;
   flex: 0 0 auto;
 }
 
-.admin-main-section-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.6rem;
-  margin-bottom: 0.6rem;
-}
-
-.admin-main-section-form label,
 .admin-parent-section-select {
   display: grid;
   gap: 0.25rem;
@@ -1904,11 +2018,6 @@ td.admin-state-empty {
   font-size: 0.8rem;
 }
 
-.admin-main-section-form label {
-  flex: 1;
-}
-
-.admin-main-section-form input,
 .admin-parent-section-select select {
   min-height: 38px;
   padding: 0.45rem 0.6rem;
@@ -1917,12 +2026,6 @@ td.admin-state-empty {
   background: var(--card-bg);
   color: var(--text-dark);
   font: inherit;
-}
-
-.admin-main-section-form button {
-  width: auto;
-  min-width: 0;
-  flex: 0 0 auto;
 }
 
 .admin-parent-section-select {
@@ -1965,8 +2068,21 @@ td.admin-state-empty {
 .admin-section-rename {
   min-width: 0;
   flex: 1;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-section-rename label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.admin-section-edit-actions {
   display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 0.4rem;
 }
 
@@ -2023,6 +2139,15 @@ td.admin-state-empty {
   flex: 0 0 auto;
   width: auto;
   white-space: nowrap;
+}
+
+.admin-empty-sections {
+  margin: 0.65rem 0 0;
+  padding: 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: var(--admin-radius-sm);
+  color: var(--text-muted);
+  text-align: center;
 }
 
 .admin-table-wrap {
@@ -2518,7 +2643,21 @@ td.admin-state-empty {
   }
 
   .admin-section-order li {
+    flex-wrap: wrap;
     align-items: flex-start;
+  }
+
+  .admin-section-order-name {
+    flex: 1 1 9rem;
+  }
+
+  .admin-parent-section-select {
+    flex: 1 1 10rem;
+  }
+
+  .admin-section-order-actions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
   }
 
   .admin-section-order-heading {
@@ -2526,16 +2665,11 @@ td.admin-state-empty {
     flex-direction: column;
   }
 
-  .admin-section-order-heading button {
+  .admin-section-count {
     align-self: flex-start;
   }
 
-  .admin-main-section-form {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .admin-main-section-form button {
+  .admin-section-order-heading button {
     align-self: flex-start;
   }
 

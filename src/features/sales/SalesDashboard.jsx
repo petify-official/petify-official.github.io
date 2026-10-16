@@ -19,7 +19,7 @@ function roundMoney(value) {
 function hasSaleDraftContent(draft) {
   return Boolean(
     draft.customerId || draft.customerName || draft.customerEmail || draft.customerPhone
-    || draft.items?.length || draft.source !== "offline" || draft.deliveryAddress
+    || draft.items?.some((item) => item.quantity > 0) || draft.source !== "offline" || draft.deliveryAddress
     || draft.deliveryPartner || draft.trackingReference || Number(draft.deliveryCharge) || draft.notes,
   );
 }
@@ -36,6 +36,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id ?? "");
   const [selectedVariantId, setSelectedVariantId] = useState("");
   const [items, setItems] = useState([]);
+  const [quantityDrafts, setQuantityDrafts] = useState({});
   const [source, setSource] = useState("offline");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryPartner, setDeliveryPartner] = useState("");
@@ -90,7 +91,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
     setCustomerPhone(draft.customerPhone ?? "");
     setSelectedProductId(draft.selectedProductId ?? "");
     setSelectedVariantId(draft.selectedVariantId ?? "");
-    setItems(Array.isArray(draft.items) ? draft.items : []);
+    setItems(Array.isArray(draft.items) ? draft.items.filter((item) => item.quantity > 0) : []);
     setSource(draft.source === "online" ? "online" : "offline");
     setDeliveryAddress(draft.deliveryAddress ?? "");
     setDeliveryPartner(draft.deliveryPartner ?? "");
@@ -446,15 +447,61 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
     });
   }
 
+  async function removeSaleItem(item) {
+    if (!await confirm({
+      title: `Remove ${item.productName || item.productId} from this sale?`,
+      description: "This product and its quantity will be removed from the current sale.",
+      confirmLabel: "Remove product",
+    })) return;
+
+    setItems((current) => current.filter((line) => line.lineKey !== item.lineKey));
+  }
+
+  function updateSaleItemQuantity(item, value) {
+    if (value === "") {
+      setQuantityDrafts((current) => ({ ...current, [item.lineKey]: value }));
+      return;
+    }
+
+    const quantity = Number(value);
+    if (!Number.isSafeInteger(quantity) || quantity < 0) return;
+    if (quantity === 0) {
+      setQuantityDrafts((current) => ({ ...current, [item.lineKey]: value }));
+      return;
+    }
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[item.lineKey];
+      return next;
+    });
+    setItems((current) => current.map((line) => line.lineKey === item.lineKey ? { ...line, quantity } : line));
+  }
+
+  async function finishSaleItemQuantityEdit(item, value) {
+    if (value === "0") {
+      await removeSaleItem(item);
+    }
+    setQuantityDrafts((current) => {
+      const next = { ...current };
+      delete next[item.lineKey];
+      return next;
+    });
+  }
+
   async function submitSale(event) {
     event.preventDefault();
+    const saleItems = items.filter((item) => item.quantity > 0);
+    if (!saleItems.length) {
+      setError("Add at least one product with a quantity greater than zero.");
+      return;
+    }
     setSaving(true);
     setError("");
     setNotice("");
     try {
       await createManualSale({
         customer: { name: customerName.trim(), email: customerEmail.trim(), phone: customerPhone.trim() },
-        items: items.map(({ productId, variantId, quantity, unitPrice }) => ({ productId, variantId, quantity, unitPrice })),
+        items: saleItems.map(({ productId, variantId, quantity, unitPrice }) => ({ productId, variantId, quantity, unitPrice })),
         discount: discountAmount,
         source,
         deliveryAddress: source === "online" ? deliveryAddress.trim() : "",
@@ -697,13 +744,28 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
 
           {items.length ? (
             <div className="sales-line-items">
+              <p className="admin-muted sales-quantity-hint">Set a product quantity to 0, or choose Remove, to confirm removing it from this sale.</p>
               {items.map((item) => (
                 <div className="sales-line-item" key={item.lineKey}>
                   <div><strong>{item.productName}</strong><span>{item.variantLabel || item.productId}</span></div>
-                  <div className="sales-line-quantity"><label>Qty<input type="number" min="1" step="1" value={item.quantity} onChange={(event) => setItems((current) => current.map((line) => line.lineKey === item.lineKey ? { ...line, quantity: Math.max(1, Math.floor(Number(event.target.value) || 1)) } : line))} /></label></div>
+                  <div className="sales-line-quantity"><label>Qty<input type="number" min="0" step="1" value={quantityDrafts[item.lineKey] ?? item.quantity} onChange={(event) => updateSaleItemQuantity(item, event.target.value)} onBlur={(event) => {
+                    const nextTarget = event.relatedTarget;
+                    const sameRowRemoveButton = nextTarget instanceof HTMLElement
+                      && nextTarget.closest(".sales-line-item") === event.currentTarget.closest(".sales-line-item")
+                      && nextTarget.classList.contains("admin-delete-button");
+                    if (sameRowRemoveButton) {
+                      setQuantityDrafts((current) => {
+                        const next = { ...current };
+                        delete next[item.lineKey];
+                        return next;
+                      });
+                      return;
+                    }
+                    void finishSaleItemQuantityEdit(item, event.currentTarget.value);
+                  }} /></label></div>
                   <div className="sales-line-price"><label>Unit price<input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(event) => setItems((current) => current.map((line) => line.lineKey === item.lineKey ? { ...line, unitPrice: roundMoney(Math.max(0, Number(event.target.value) || 0)) } : line))} /></label></div>
                   <div className="sales-line-total">{formatProductPrice(roundMoney(item.quantity * item.unitPrice))}</div>
-                  <button type="button" className="admin-delete-button" onClick={() => setItems((current) => current.filter((line) => line.lineKey !== item.lineKey))}>Remove</button>
+                  <button type="button" className="admin-delete-button" onClick={() => { void removeSaleItem(item); }}>Remove</button>
                 </div>
               ))}
             </div>
@@ -763,7 +825,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
               }}>Clear draft</button>
             </div>
           </div>
-          <button className="admin-primary-button" type="submit" disabled={saving || deliveryChargeInvalid || salesSettings?.enabled === false}>{saving ? "Saving" : "Save sale and invoice"}</button>
+          <button className="admin-primary-button" type="submit" disabled={saving || Object.keys(quantityDrafts).length > 0 || !items.some((item) => item.quantity > 0) || deliveryChargeInvalid || salesSettings?.enabled === false}>{saving ? "Saving" : "Save sale and invoice"}</button>
           </fieldset>
         </form>
 
