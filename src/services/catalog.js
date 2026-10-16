@@ -49,6 +49,7 @@ export async function getCatalog(onSettingsLoaded) {
     return {
       products: [],
       sections: [],
+      mainSections: [],
       settings: null,
       error: new Error("Supabase is not configured."),
     };
@@ -63,7 +64,7 @@ export async function getCatalog(onSettingsLoaded) {
     if (!result.error && result.data) onSettingsLoaded?.(mapSettings(result.data));
     return result;
   });
-  const [productsResult, sectionsResult, settingsResult] = await Promise.all([
+  const [productsResult, sectionsResult, mainSectionsResult, settingsResult] = await Promise.all([
     supabase
       .from("products")
       .select("*")
@@ -71,18 +72,23 @@ export async function getCatalog(onSettingsLoaded) {
       .order("display_order", { ascending: true }),
     supabase
       .from("catalog_sections")
-      .select("id, title, display_order")
+      .select("id, title, display_order, main_section_id")
       .eq("is_active", true)
+      .order("display_order", { ascending: true }),
+    supabase
+      .from("catalog_main_sections")
+      .select("id, title, display_order")
       .order("display_order", { ascending: true }),
     settingsPromise,
   ]);
 
-  if (productsResult.error || sectionsResult.error || settingsResult.error) {
+  if (productsResult.error || sectionsResult.error || mainSectionsResult.error || settingsResult.error) {
     return {
       products: [],
       sections: [],
+      mainSections: [],
       settings: null,
-      error: productsResult.error || sectionsResult.error || settingsResult.error,
+      error: productsResult.error || sectionsResult.error || mainSectionsResult.error || settingsResult.error,
     };
   }
 
@@ -91,6 +97,7 @@ export async function getCatalog(onSettingsLoaded) {
     return {
       products: productsResult.data.map(mapProduct),
       sections: sectionsResult.data,
+      mainSections: mainSectionsResult.data,
       settings: null,
       error: new Error("Storefront settings are missing from Supabase."),
     };
@@ -99,6 +106,7 @@ export async function getCatalog(onSettingsLoaded) {
   return {
     products: productsResult.data.map(mapProduct),
     sections: sectionsResult.data,
+    mainSections: mainSectionsResult.data,
     settings: mapSettings(row),
     error: null,
   };

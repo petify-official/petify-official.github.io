@@ -21,7 +21,7 @@ import AdminNotice from "./components/AdminNotice.jsx";
 import AdminState from "./components/AdminState.jsx";
 import useObjectUrl from "../../hooks/useObjectUrl.js";
 
-export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, sections, products }) {
+export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, mainSections, sections, products }) {
   const [storeLogo, setStoreLogo] = useState("");
   const [storeFavicon, setStoreFavicon] = useState("");
   const [heroPills, setHeroPills] = useState([]);
@@ -293,8 +293,11 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
                 <select value={pill.target || ""} onChange={(event) => updatePill(index, "target", event.target.value)}>
                   <option value="">No destination</option>
                   <option value="#site-header">Header</option>
-                  {sections.filter((section) => products.some((product) => product.sectionId === section.id && product.isActive)).map((section) => (
-                    <option key={section.id} value={`#catalog-section-${section.id}`}>{section.title}</option>
+                  {mainSections.filter((mainSection) => sections.some((section) => section.is_active && section.main_section_id === mainSection.id && products.some((product) => product.sectionId === section.id && product.isActive))).map((mainSection) => (
+                    <option key={mainSection.id} value={`#catalog-main-section-${mainSection.id}`}>{mainSection.title}</option>
+                  ))}
+                  {sections.filter((section) => section.is_active && products.some((product) => product.sectionId === section.id && product.isActive)).map((section) => (
+                    <option key={section.id} value={`#catalog-section-${section.id}`}>{section.main_section_id ? `↳ ${section.title}` : section.title}</option>
                   ))}
                   <option value="#site-footer">Footer</option>
                 </select>

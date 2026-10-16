@@ -42,6 +42,16 @@ export async function getAdminSections() {
   return data;
 }
 
+export async function getAdminMainSections() {
+  const { data, error } = await supabase
+    .from("catalog_main_sections")
+    .select("*")
+    .order("display_order", { ascending: true });
+  if (error) throw error;
+
+  return data;
+}
+
 export async function getStoreLogo() {
   const { data, error } = await supabase
     .from("site_settings")
@@ -179,6 +189,15 @@ export async function createCatalogSection(section) {
   if (error) throw error;
 }
 
+export async function createCatalogMainSection(section) {
+  const { error } = await supabase.from("catalog_main_sections").insert({
+    id: section.id,
+    title: section.title,
+    display_order: section.displayOrder,
+  });
+  if (error) throw error;
+}
+
 export async function renameCatalogSection(sectionId, title) {
   const { error } = await supabase
     .from("catalog_sections")
@@ -187,9 +206,47 @@ export async function renameCatalogSection(sectionId, title) {
   if (error) throw error;
 }
 
+export async function renameCatalogMainSection(sectionId, title) {
+  const { error } = await supabase
+    .from("catalog_main_sections")
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq("id", sectionId);
+  if (error) throw error;
+}
+
 export async function deleteCatalogSection(sectionId) {
   const { error } = await supabase.from("catalog_sections").delete().eq("id", sectionId);
   if (error) throw error;
+}
+
+export async function deleteCatalogMainSection(sectionId) {
+  const { error: deleteError } = await supabase.from("catalog_main_sections").delete().eq("id", sectionId);
+  if (deleteError) throw deleteError;
+
+  const { data, error: settingsError } = await supabase
+    .from("site_settings")
+    .select("hero_pills")
+    .eq("id", "storefront")
+    .maybeSingle();
+  if (settingsError) {
+    throw new Error(`Main section deleted, but hero navigation could not be checked: ${settingsError.message}`);
+  }
+  if (!data || !Array.isArray(data.hero_pills)) {
+    throw new Error("Main section deleted, but the storefront hero navigation is missing or invalid.");
+  }
+
+  const target = `#catalog-main-section-${sectionId}`;
+  const heroPills = data.hero_pills;
+  const nextHeroPills = heroPills.map((pill) => pill?.target === target ? { ...pill, target: "" } : pill);
+  if (heroPills.some((pill) => pill?.target === target)) {
+    const { error: updateError } = await supabase
+      .from("site_settings")
+      .update({ hero_pills: nextHeroPills, updated_at: new Date().toISOString() })
+      .eq("id", "storefront");
+    if (updateError) {
+      throw new Error(`Main section deleted, but its hero navigation link could not be cleared: ${updateError.message}`);
+    }
+  }
 }
 
 export async function saveCatalogSectionOrder(sections) {
@@ -201,6 +258,28 @@ export async function saveCatalogSectionOrder(sections) {
   ));
   const failedUpdate = results.find((result) => result.error);
   if (failedUpdate) throw failedUpdate.error;
+}
+
+export async function saveCatalogMainSectionOrder(sections) {
+  const results = await Promise.all(sections.map((section, index) =>
+    supabase
+      .from("catalog_main_sections")
+      .update({ display_order: index + 1 })
+      .eq("id", section.id)
+  ));
+  const failedUpdate = results.find((result) => result.error);
+  if (failedUpdate) throw failedUpdate.error;
+}
+
+export async function setCatalogSectionMainSection(sectionId, mainSectionId) {
+  const { error } = await supabase
+    .from("catalog_sections")
+    .update({
+      main_section_id: mainSectionId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", sectionId);
+  if (error) throw error;
 }
 
 export async function updateStoreLogo(file, imageOptions = {}) {

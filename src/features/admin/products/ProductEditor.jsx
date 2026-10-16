@@ -28,7 +28,7 @@ function addImageFiles(files) {
   setImageItems((current) => [...current, ...selected]);
 }
 
-export default function ProductEditor({ product, draft, products, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
+export default function ProductEditor({ product, draft, products, mainSections, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
   const [isEditing, setIsEditing] = useState(() => draft?.isEditing ?? Boolean(product.id));
   const initialProductState = useRef(null);
   if (!initialProductState.current) {
@@ -454,10 +454,13 @@ export default function ProductEditor({ product, draft, products, sections, user
           {productDraft.error && <AdminNotice kind="error">{productDraft.error}</AdminNotice>}
           {productDraft.restored && <AdminNotice kind="success">Saved product draft restored. Storefront changes remain unpublished until you publish this product.</AdminNotice>}
           <fieldset className="admin-form-grid admin-editor-fields" disabled={!productDraft.loaded || busy}>
-            <label>Store section
+            <label>Subsection
               <select value={form.sectionId} onChange={(event) => update("sectionId", event.target.value)}>
-                <option value="">No section</option>
-                {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
+                <option value="">No subsection (not shown in catalog)</option>
+                {sections.map((section) => {
+                  const mainSection = mainSections.find((item) => item.id === section.main_section_id);
+                  return <option key={section.id} value={section.id}>{mainSection ? `${mainSection.title} / ` : ""}{section.title}</option>;
+                })}
               </select>
             </label>
             <label>Product type

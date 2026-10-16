@@ -1,3 +1,11 @@
+create table if not exists public.catalog_main_sections (
+  id text primary key,
+  title text not null,
+  display_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.catalog_sections (
   id text primary key,
   title text not null,
@@ -7,6 +15,29 @@ create table if not exists public.catalog_sections (
   updated_at timestamptz not null default now()
 );
 
+alter table public.catalog_sections
+  add column if not exists main_section_id text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'catalog_sections_main_section_id_fkey'
+      and conrelid = 'public.catalog_sections'::regclass
+  ) then
+    alter table public.catalog_sections
+      add constraint catalog_sections_main_section_id_fkey
+      foreign key (main_section_id)
+      references public.catalog_main_sections (id)
+      on update cascade
+      on delete set null;
+  end if;
+end;
+$$;
+
+create index if not exists catalog_sections_main_order_idx
+  on public.catalog_sections (main_section_id, display_order);
 
 alter table public.products
   add column if not exists section_id text;
@@ -39,6 +70,35 @@ create index if not exists products_section_order_idx
 alter table public.catalog_sections enable row level security;
 grant select on public.catalog_sections to anon, authenticated;
 grant insert, update on public.catalog_sections to authenticated;
+
+alter table public.catalog_main_sections enable row level security;
+grant select on public.catalog_main_sections to anon, authenticated;
+grant insert, update, delete on public.catalog_main_sections to authenticated;
+
+drop policy if exists "Catalog main sections are readable by everyone" on public.catalog_main_sections;
+create policy "Catalog main sections are readable by everyone"
+  on public.catalog_main_sections for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "Petify admins can insert catalog main sections" on public.catalog_main_sections;
+create policy "Petify admins can insert catalog main sections"
+  on public.catalog_main_sections for insert
+  to authenticated
+  with check (public.is_petify_admin());
+
+drop policy if exists "Petify admins can update catalog main sections" on public.catalog_main_sections;
+create policy "Petify admins can update catalog main sections"
+  on public.catalog_main_sections for update
+  to authenticated
+  using (public.is_petify_admin())
+  with check (public.is_petify_admin());
+
+drop policy if exists "Petify admins can delete catalog main sections" on public.catalog_main_sections;
+create policy "Petify admins can delete catalog main sections"
+  on public.catalog_main_sections for delete
+  to authenticated
+  using (public.is_petify_admin());
 
 drop policy if exists "Active catalog sections are readable by everyone" on public.catalog_sections;
 create policy "Active catalog sections are readable by everyone"

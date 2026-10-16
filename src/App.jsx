@@ -16,7 +16,7 @@ const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
 
 export default function App() {
-  const { products, sections, settings, loading, error } = useStorefrontCatalog();
+  const { products, sections, mainSections, settings, loading, error } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
   const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings" || routeHash === "#admin-products";
@@ -125,7 +125,7 @@ export default function App() {
           <p className="catalog-notice" role="alert">Catalog service is unavailable. Products could not be loaded from Supabase.</p>
         ) : (
           <>
-            {(settings.visibility.catalog ?? true) && <CatalogSections sections={sections} products={products} whatsappNumber={settings.contact.whatsappNumber} />}
+            {(settings.visibility.catalog ?? true) && <CatalogSections mainSections={mainSections} sections={sections} products={products} whatsappNumber={settings.contact.whatsappNumber} />}
             {(settings.visibility.coming_soon ?? true) && (
               <h2 className="section-title glow-text" aria-label={settings.comingSoonTitle}>
                 <span className="status-dot" aria-hidden="true" />

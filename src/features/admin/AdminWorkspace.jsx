@@ -28,12 +28,18 @@ import {
 } from "./products/productUtils.js";
 import {
   createCatalogSection,
+  createCatalogMainSection,
   deleteProduct,
   deleteCatalogSection,
+  deleteCatalogMainSection,
   getAdminProducts,
   getAdminSections,
+  getAdminMainSections,
   renameCatalogSection,
+  renameCatalogMainSection,
   saveCatalogSectionOrder,
+  saveCatalogMainSectionOrder,
+  setCatalogSectionMainSection,
   setCatalogSectionActive,
   setProductPrice,
   setProductActive,
@@ -50,6 +56,7 @@ const ProductEditor = lazy(() => import("./products/ProductEditor.jsx"));
 export default function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
   const [products, setProducts] = useState([]);
   const [sections, setSections] = useState([]);
+  const [mainSections, setMainSections] = useState([]);
   const [productDrafts, setProductDrafts] = useState([]);
   const [workspace, setWorkspace] = useState(() => {
     const savedWorkspace = readAdminWorkspace(session.user.id);
@@ -68,8 +75,15 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   const [sectionTitle, setSectionTitle] = useState("");
   const [creatingSection, setCreatingSection] = useState(false);
   const [savingSectionOrder, setSavingSectionOrder] = useState(false);
+  const [savingMainSectionOrder, setSavingMainSectionOrder] = useState(false);
+  const [savingParentSectionId, setSavingParentSectionId] = useState("");
   const [editingSectionId, setEditingSectionId] = useState("");
   const [editingSectionTitle, setEditingSectionTitle] = useState("");
+  const [addingMainSection, setAddingMainSection] = useState(false);
+  const [mainSectionTitle, setMainSectionTitle] = useState("");
+  const [creatingMainSection, setCreatingMainSection] = useState(false);
+  const [editingMainSectionId, setEditingMainSectionId] = useState("");
+  const [editingMainSectionTitle, setEditingMainSectionTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingVisibilityId, setSavingVisibilityId] = useState("");
@@ -150,9 +164,10 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   async function refreshProducts() {
     setError("");
     try {
-      const [nextProducts, nextSections] = await Promise.all([getAdminProducts(), getAdminSections()]);
+      const [nextProducts, nextSections, nextMainSections] = await Promise.all([getAdminProducts(), getAdminSections(), getAdminMainSections()]);
       setProducts(nextProducts);
       setSections(nextSections);
+      setMainSections(nextMainSections);
     } catch (loadError) {
       setError(loadError.message || "Products could not be loaded.");
     } finally {
@@ -208,6 +223,102 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
       setError(createError.message || "The section could not be created.");
     } finally {
       setCreatingSection(false);
+    }
+  }
+
+  async function addMainSection(event) {
+    event.preventDefault();
+    const title = mainSectionTitle.trim();
+    const id = slugify(title);
+    if (!id) {
+      setError("Enter a main section name using letters or numbers.");
+      return;
+    }
+
+    setCreatingMainSection(true);
+    setError("");
+    try {
+      await createCatalogMainSection({ id, title, displayOrder: mainSections.length + 1 });
+      setMainSections(await getAdminMainSections());
+      setMainSectionTitle("");
+      setAddingMainSection(false);
+    } catch (createError) {
+      setError(createError.message || "The main section could not be created.");
+    } finally {
+      setCreatingMainSection(false);
+    }
+  }
+
+  async function moveMainSection(index, direction) {
+    const target = index + direction;
+    if (target < 0 || target >= mainSections.length || savingMainSectionOrder) return;
+
+    const nextMainSections = [...mainSections];
+    const [mainSection] = nextMainSections.splice(index, 1);
+    nextMainSections.splice(target, 0, mainSection);
+    setMainSections(nextMainSections);
+    setSavingMainSectionOrder(true);
+    setError("");
+    try {
+      await saveCatalogMainSectionOrder(nextMainSections);
+    } catch (orderError) {
+      setError(orderError.message || "The main section order could not be saved.");
+      await refreshProducts();
+    } finally {
+      setSavingMainSectionOrder(false);
+    }
+  }
+
+  async function saveMainSectionTitle(event, mainSection) {
+    event.preventDefault();
+    const title = editingMainSectionTitle.trim();
+    if (!title) {
+      setError("Main section name cannot be empty.");
+      return;
+    }
+
+    setError("");
+    try {
+      await renameCatalogMainSection(mainSection.id, title);
+      setMainSections(await getAdminMainSections());
+      setEditingMainSectionId("");
+      setEditingMainSectionTitle("");
+    } catch (renameError) {
+      setError(renameError.message || "The main section name could not be saved.");
+    }
+  }
+
+  async function removeMainSection(mainSection) {
+    if (!await confirm({
+      title: `Delete the ${mainSection.title} main section?`,
+      description: "Its subsections will become standalone sections and remain visible.",
+      confirmLabel: "Delete main section",
+    })) return;
+
+    setError("");
+    try {
+      await deleteCatalogMainSection(mainSection.id);
+      const [nextSections, nextMainSections] = await Promise.all([getAdminSections(), getAdminMainSections()]);
+      setSections(nextSections);
+      setMainSections(nextMainSections);
+    } catch (deleteError) {
+      await refreshProducts();
+      setError(deleteError.message || "The main section could not be deleted.");
+    }
+  }
+
+  async function assignSectionToMain(section, mainSectionId) {
+    setSavingParentSectionId(section.id);
+    setError("");
+    try {
+      await setCatalogSectionMainSection(section.id, mainSectionId);
+      setSections((current) => current.map((item) => item.id === section.id
+        ? { ...item, main_section_id: mainSectionId || null }
+        : item));
+    } catch (assignmentError) {
+      setError(assignmentError.message || "The subsection's main section could not be saved.");
+    } finally {
+      setSavingParentSectionId("");
     }
   }
 
@@ -430,6 +541,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                     adminBrand={adminBrand}
                     onAdminBrandChange={onAdminBrandChange}
                     userId={session.user.id}
+                    mainSections={mainSections}
                     sections={sections}
                     products={products}
                   />
@@ -445,6 +557,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                   product={editorProduct}
                   draft={editorDraft}
                   products={products}
+                  mainSections={mainSections}
                   sections={sections}
                   userId={session.user.id}
                   onCancel={() => saveEditorDraft(null)}
@@ -456,17 +569,17 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
             ) : (
               <>
               <div className="admin-page-heading">
-                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Manage products and their storefront sections.</p></div>
+                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Organize products into subsections and optional main sections.</p></div>
               </div>
               <div className={`admin-create-fab${floatingActionsVisible ? "" : " is-scroll-hidden"}`} aria-hidden={!floatingActionsVisible} inert={!floatingActionsVisible}>
                 {addingSection ? (
                   <form className="admin-section-form admin-section-fab-form" onSubmit={addSection}>
                     <div className="admin-section-fab-heading">
-                      <strong>New catalog section</strong>
+                      <strong>New subsection</strong>
                       <AdminButton aria-label="Close new section form" onClick={() => { setAddingSection(false); setSectionTitle(""); }}>×</AdminButton>
                     </div>
-                    <label>Section name<input autoFocus value={sectionTitle} onChange={(event) => setSectionTitle(event.target.value)} placeholder="Toys, Pets, Cages..." required /></label>
-                    <button className="admin-primary-button" type="submit" disabled={creatingSection}>{creatingSection ? "Creating..." : "Create section"}</button>
+                    <label>Subsection name<input autoFocus value={sectionTitle} onChange={(event) => setSectionTitle(event.target.value)} placeholder="Dry food, toys, cages..." required /></label>
+                    <button className="admin-primary-button" type="submit" disabled={creatingSection}>{creatingSection ? "Creating..." : "Create subsection"}</button>
                     <button className="admin-secondary-button" type="button" onClick={() => { setAddingSection(false); setSectionTitle(""); }}>Cancel</button>
                   </form>
                 ) : (
@@ -485,7 +598,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                           Add product
                         </AdminButton>
                         {!sections.length && <span>Create a section before adding products.</span>}
-                        <AdminButton onClick={() => { setCreateActionsOpen(false); setAddingSection(true); }}>New section</AdminButton>
+                        <AdminButton onClick={() => { setCreateActionsOpen(false); setAddingSection(true); }}>New subsection</AdminButton>
                       </div>
                     )}
                     <AdminButton
@@ -541,9 +654,49 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                   </ul>
                 </section>
               )}
+              <section className="admin-section-order" aria-labelledby="admin-main-section-order-title">
+                <div className="admin-section-order-heading">
+                  <div>
+                    <h2 id="admin-main-section-order-title">Main sections</h2>
+                    <p className="admin-muted">Group related subsections. Subsections without a main section stay standalone.</p>
+                  </div>
+                  <AdminButton onClick={() => setAddingMainSection((current) => !current)}>{addingMainSection ? "Cancel" : "New main section"}</AdminButton>
+                </div>
+                {addingMainSection && (
+                  <form className="admin-main-section-form" onSubmit={addMainSection}>
+                    <label>Main section name<input autoFocus value={mainSectionTitle} onChange={(event) => setMainSectionTitle(event.target.value)} placeholder="Food, habitats, accessories..." required /></label>
+                    <button className="admin-primary-button" type="submit" disabled={creatingMainSection}>{creatingMainSection ? "Creating..." : "Create main section"}</button>
+                  </form>
+                )}
+                {mainSections.length > 0 && (
+                  <ol>
+                    {mainSections.map((mainSection, index) => (
+                      <li key={mainSection.id}>
+                        {editingMainSectionId === mainSection.id ? (
+                          <form className="admin-section-rename" onSubmit={(event) => saveMainSectionTitle(event, mainSection)}>
+                            <input aria-label={`Rename ${mainSection.title}`} value={editingMainSectionTitle} onChange={(event) => setEditingMainSectionTitle(event.target.value)} required />
+                            <button className="admin-primary-button" type="submit">Save</button>
+                            <button className="admin-secondary-button" type="button" onClick={() => setEditingMainSectionId("")}>Cancel</button>
+                          </form>
+                        ) : (
+                          <>
+                            <span className="admin-section-order-name"><strong>{mainSection.title}</strong><small>{sections.filter((subsection) => subsection.main_section_id === mainSection.id).length || "No"} subsections</small></span>
+                            <span className="admin-section-order-actions">
+                              <button className="admin-secondary-button admin-order-arrow" type="button" title="Move main section earlier" aria-label={`Move ${mainSection.title} earlier`} disabled={savingMainSectionOrder || index === 0} onClick={() => moveMainSection(index, -1)}>↑</button>
+                              <button className="admin-secondary-button admin-order-arrow" type="button" title="Move main section later" aria-label={`Move ${mainSection.title} later`} disabled={savingMainSectionOrder || index === mainSections.length - 1} onClick={() => moveMainSection(index, 1)}>↓</button>
+                              <button className="admin-secondary-button" type="button" onClick={() => { setEditingMainSectionId(mainSection.id); setEditingMainSectionTitle(mainSection.title); }}>Rename</button>
+                              <button className="admin-delete-button" type="button" onClick={() => removeMainSection(mainSection)}>Delete</button>
+                            </span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
               {sections.length > 0 && (
                 <section className="admin-section-order" aria-labelledby="admin-section-order-title">
-                  <h2 id="admin-section-order-title">Catalog sections</h2>
+                  <h2 id="admin-section-order-title">Subsections</h2>
                   <ol>
                     {sections.map((section, index) => (
                       <li key={section.id}>
@@ -556,6 +709,12 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                         ) : (
                           <>
                             <span className="admin-section-order-name"><strong>{section.title}</strong><small>{section.id}</small></span>
+                            <label className="admin-parent-section-select">Main section
+                              <select value={section.main_section_id ?? ""} disabled={savingParentSectionId === section.id} onChange={(event) => assignSectionToMain(section, event.target.value)}>
+                                <option value="">Standalone</option>
+                                {mainSections.map((mainSection) => <option key={mainSection.id} value={mainSection.id}>{mainSection.title}</option>)}
+                              </select>
+                            </label>
                             <label className="admin-inline-switch"><input type="checkbox" role="switch" checked={section.is_active} disabled={Boolean(savingVisibilityId)} aria-label={`${section.is_active ? "Hide" : "Show"} ${section.title}`} onChange={() => toggleSectionVisibility(section)} /><span>{section.is_active ? "Visible" : "Hidden"}</span></label>
                             <span className="admin-section-order-actions">
                               <button className="admin-secondary-button admin-order-arrow" type="button" title="Move section earlier" aria-label={`Move ${section.title} earlier`} disabled={savingSectionOrder || index === 0} onClick={() => moveSection(index, -1)}>↑</button>
@@ -574,12 +733,16 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               {loading ? <AdminState kind="loading" description="Loading products..." /> : (
                 <div className="admin-table-wrap">
                   <table className="admin-table">
-                    <thead><tr><th>Product</th><th>Section</th><th>Price / varieties</th><th>Stock</th><th>Visibility</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Product</th><th>Subsection</th><th>Price / varieties</th><th>Stock</th><th>Visibility</th><th>Actions</th></tr></thead>
                     <tbody>
                       {filteredProducts.map((product) => (
                         <tr key={product.id}>
                           <td><div className="admin-product-cell">{product.images[0] ? <img src={product.images[0]} alt="" /> : <span className="admin-product-placeholder" aria-hidden="true" />}<div><strong>{product.title || "Untitled product"}</strong><span>{product.id}</span></div></div></td>
-                          <td>{sections.find((section) => section.id === product.sectionId)?.title || "Unassigned"}</td>
+                          <td>{(() => {
+                            const section = sections.find((item) => item.id === product.sectionId);
+                            const mainSection = mainSections.find((item) => item.id === section?.main_section_id);
+                            return section ? `${mainSection ? `${mainSection.title} / ` : ""}${section.title}` : "Unassigned";
+                          })()}</td>
                           <td>{productPriceLabel(product)}</td>
                           <td>
                             <form className="admin-stock-inline" onSubmit={(event) => {
@@ -651,10 +814,13 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
           </select>
         </label>
         <label>
-          Catalog section
+          Subsection
           <select value={productSectionFilter} onChange={(event) => setProductSectionFilter(event.target.value)}>
             <option value="all">All sections</option>
-            {sections.map((section) => <option key={section.id} value={section.id}>{section.title}</option>)}
+            {sections.map((section) => {
+              const mainSection = mainSections.find((item) => item.id === section.main_section_id);
+              return <option key={section.id} value={section.id}>{mainSection ? `${mainSection.title} / ` : ""}{section.title}</option>;
+            })}
           </select>
         </label>
         <label>

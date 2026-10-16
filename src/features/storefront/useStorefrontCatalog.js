@@ -5,6 +5,7 @@ export default function useStorefrontCatalog() {
   const [catalog, setCatalog] = useState({
     products: [],
     sections: [],
+    mainSections: [],
     settings: null,
     loading: true,
     error: null,
@@ -19,7 +20,7 @@ export default function useStorefrontCatalog() {
       setCatalog({ ...result, loading: false });
     }).catch((error) => {
       if (!active) return;
-      setCatalog({ products: [], sections: [], settings: null, loading: false, error });
+      setCatalog({ products: [], sections: [], mainSections: [], settings: null, loading: false, error });
     });
     return () => { active = false; };
   }, []);
