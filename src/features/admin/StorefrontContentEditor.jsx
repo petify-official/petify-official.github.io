@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getStorefrontContent, saveStorefrontContent } from "../../services/admin.js";
+import { DEFAULT_ABOUT_CONTENT } from "../../config/siteContent.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "./WorkspaceDraftControls.jsx";
 import AdminNotice from "./components/AdminNotice.jsx";
@@ -69,6 +70,14 @@ export default function StorefrontContentEditor({ userId }) {
     setNotice("");
   }
 
+  function updateAbout(field, value) {
+    setContent((current) => ({
+      ...current,
+      aboutContent: { ...current.aboutContent, [field]: value },
+    }));
+    setNotice("");
+  }
+
   async function submit(event) {
     event.preventDefault();
     setSaving(true);
@@ -105,6 +114,32 @@ export default function StorefrontContentEditor({ userId }) {
           <label>Location<input value={content.location} onChange={(event) => update("location", event.target.value)} required /></label>
           <label>Footer title<input value={content.footerTitle} onChange={(event) => update("footerTitle", event.target.value)} required /></label>
           <label>Coming soon title<input value={content.comingSoonTitle} onChange={(event) => update("comingSoonTitle", event.target.value)} required /></label>
+          <div className="admin-about-content-editor admin-span-two">
+            <h3>About page</h3>
+            <p>These details appear under About us in the storefront menu.</p>
+            {!content.aboutContentAvailable && (
+              <AdminNotice kind="info">
+                About copy is using starter text until the database update is applied. Run <code>supabase/catalog-sections.sql</code> to enable editing.
+              </AdminNotice>
+            )}
+            {Object.entries({
+              title: "About page heading",
+              introduction: "Introduction",
+              mission: "Our mission",
+              vision: "Our vision",
+              whoWeAre: "Who we are",
+            }).map(([field, label]) => (
+              <label key={field}>{label}
+                <textarea
+                  rows={field === "title" ? 2 : 4}
+                  value={content.aboutContent?.[field] ?? DEFAULT_ABOUT_CONTENT[field]}
+                  onChange={(event) => updateAbout(field, event.target.value)}
+                  disabled={!content.aboutContentAvailable}
+                  required
+                />
+              </label>
+            ))}
+          </div>
           <label>Copyright note<input value={content.footerCopyright} onChange={(event) => update("footerCopyright", event.target.value)} required /></label>
           <label>Store disclaimer<input value={content.footerDisclaimer} onChange={(event) => update("footerDisclaimer", event.target.value)} required /></label>
           <label>Version number<input value={content.footerVersion} onChange={(event) => update("footerVersion", event.target.value)} required /></label>

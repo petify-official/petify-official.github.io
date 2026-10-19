@@ -7,10 +7,10 @@ function OrderLink({ product, whatsappNumber, combo, variant }) {
     ? `${product.defaultWhatsappMsg}\nOption: ${variant.label}\nPrice: ${formatProductPrice(variant.price)}`
     : product.defaultWhatsappMsg;
   const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-  return <a href={link} className="btn" target="_blank" rel="noopener noreferrer">{combo ? "Order Combo" : "Order via WhatsApp"}</a>;
+  return <a href={link} className="btn btn-direct-order" target="_blank" rel="noopener noreferrer">{combo ? "Order Combo via WhatsApp" : "Order directly via WhatsApp"}</a>;
 }
 
-export default function ProductCard({ product, whatsappNumber }) {
+export default function ProductCard({ product, whatsappNumber, onAddToCart }) {
   const combo = product.type === "combo";
   const variants = productOptions(product);
   const [selectedVariantId, setSelectedVariantId] = useState(variants[0]?.id ?? "");
@@ -20,12 +20,13 @@ export default function ProductCard({ product, whatsappNumber }) {
   const displayOldPrice = isVariantProduct
     ? (selectedVariant?.oldPrice ? formatProductPrice(selectedVariant.oldPrice) : "")
     : product.oldPrice;
+  const canAddToCart = Boolean(selectedVariant && selectedVariant.price > 0);
 
   return (
     <article className={`card${combo ? " combo-card" : ""}`}>
       {combo && <span className="save-tag">{product.saveTag}</span>}
       <ProductGallery product={product} />
-      <div>
+      <div className="card-content">
         <span className="card-badge">{product.badge}</span>
         <h3>{product.title}</h3>
         <p>{product.description}</p>
@@ -71,7 +72,22 @@ export default function ProductCard({ product, whatsappNumber }) {
           {displayOldPrice && <span className="old-price">{displayOldPrice}</span>}
         </div>
       )}
-      <OrderLink product={product} whatsappNumber={whatsappNumber} combo={combo} variant={isVariantProduct ? selectedVariant : null} />
+      <div className="card-actions">
+        <button
+          className="btn btn-add-to-cart"
+          type="button"
+          disabled={!canAddToCart}
+          onClick={() => onAddToCart(product, selectedVariant)}
+          title={canAddToCart ? `Add ${product.title} to cart` : "Price unavailable; order directly via WhatsApp"}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 7h12l1 14H5L6 7Z" />
+            <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+          </svg>
+          <span>Add to cart</span>
+        </button>
+        <OrderLink product={product} whatsappNumber={whatsappNumber} combo={combo} variant={isVariantProduct ? selectedVariant : null} />
+      </div>
     </article>
   );
 }

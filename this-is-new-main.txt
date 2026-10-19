@@ -1,6 +1,7 @@
-git fetch origin
-git branch new-main origin/main
-git push origin new-main
+git add .
+git commit -m "updated ui/ux - cart - about us"
+git push origin edits-2
 
+npm run build
+npm run deploy
 
-after vercel app

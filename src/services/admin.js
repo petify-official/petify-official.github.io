@@ -1,5 +1,6 @@
 import { supabase } from "../lib/supabase.js";
 import { compressImageFile } from "../lib/imageProcessing.js";
+import { DEFAULT_ABOUT_CONTENT, normalizeAboutContent } from "../config/siteContent.js";
 
 const imageBucket = "product-images";
 
@@ -134,6 +135,14 @@ export async function getStorefrontContent() {
   if (error) throw error;
   if (!data) throw new Error("Storefront settings are missing from Supabase.");
 
+  const aboutResult = await supabase
+    .from("site_settings")
+    .select("about_content")
+    .eq("id", "storefront")
+    .maybeSingle();
+  const aboutContentAvailable = aboutResult.error?.code !== "42703";
+  if (aboutResult.error && aboutContentAvailable) throw aboutResult.error;
+
   return {
     brandTitle: data.brand_title,
     tagline: data.tagline,
@@ -142,6 +151,10 @@ export async function getStorefrontContent() {
     email: data.email,
     location: data.location,
     features: data.features ?? [],
+    aboutContent: aboutContentAvailable
+      ? normalizeAboutContent(aboutResult.data?.about_content)
+      : DEFAULT_ABOUT_CONTENT,
+    aboutContentAvailable,
     footerTitle: data.footer_title,
     footerCopyright: data.footer_copyright,
     footerDisclaimer: data.footer_disclaimer,
@@ -162,6 +175,7 @@ export async function saveStorefrontContent(content) {
       email: content.email,
       location: content.location,
       features: content.features,
+      ...(content.aboutContentAvailable ? { about_content: content.aboutContent } : {}),
       footer_title: content.footerTitle,
       footer_copyright: content.footerCopyright,
       footer_disclaimer: content.footerDisclaimer,

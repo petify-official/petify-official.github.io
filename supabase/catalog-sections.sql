@@ -160,6 +160,13 @@ alter table public.site_settings
     {"title":"Cages & Housing","description":"Durable, comfortable enclosures tailored for birds and small pets."},
     {"title":"Pet Care Accessories","description":"Essential toys, grooming supplies, and everyday care essentials."}
   ]'::jsonb,
+  add column if not exists about_content jsonb not null default '{
+    "title":"Thoughtful care for extraordinary companions",
+    "introduction":"Pëtify brings together thoughtfully selected pet essentials, specialized nutrition, and habitat products to support the everyday wellbeing of the animals we love.",
+    "mission":"To make thoughtful pet care easier by bringing useful products and caring guidance together in one place.",
+    "vision":"A world where every companion, big or small, feathered or finned, has the care, nutrition, and environment it needs to thrive.",
+    "whoWeAre":"Pëtify is a pet-care store for people who want to make informed, caring choices for their companions. Our collection brings everyday essentials together with specialist products for a range of pets. Have a question about a product? Our team is here to help."
+  }'::jsonb,
   add column if not exists footer_title text not null default 'Petify Group',
   add column if not exists footer_legal text not null default '© Petify Group. All rights reserved. *Not for human consumption. Store in a cool, dry place.',
   add column if not exists footer_version text not null default '1.0.0',

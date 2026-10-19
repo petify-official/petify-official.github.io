@@ -13,7 +13,7 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL Editor.
 3. Run `supabase/admin.sql` to create the admin role, product write policies, and public image bucket.
-4. Run `supabase/catalog-sections.sql` to add configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone. Rerun this script after updates to apply later additions; it is safe to rerun.
+4. Run `supabase/catalog-sections.sql` to add configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, the editable About page, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone. Rerun this script after updates to apply later additions, including the About page settings column; it is safe to rerun.
 5. Run `supabase/sales.sql` to enable the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. Run it after `admin.sql` and `catalog-sections.sql`; it is safe to rerun.
 6. Run `supabase/inventory-dashboard.sql` after `sales.sql` to add admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales. This script is safe to rerun.
 7. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
@@ -33,7 +33,7 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 
 Only the public anon key belongs in this frontend. Never put a service-role key in a `VITE_` variable. Visitors can read active products; catalog writes require the assigned admin role. Sales access requires either the admin role or an explicitly assigned Sales role.
 
-The existing storefront does not currently have a checkout/order database or inventory/stock fields; customer orders are initiated through WhatsApp.
+The storefront has a client-side cart for combining priced products and variants into one WhatsApp order request; each product can still be ordered directly from its card. Cart contents last only for the current page session and are not saved as a data source. There is no checkout/order database or storefront inventory/stock tracking; availability, shipping, and payment are confirmed by the team over WhatsApp. Edit the About page's introduction, mission, vision, and team description in **Admin → Site settings → Store content → About page**.
 
 ## Future mobile app
 

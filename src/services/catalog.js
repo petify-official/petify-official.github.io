@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { DEFAULT_ABOUT_CONTENT, normalizeAboutContent } from "../config/siteContent.js";
 
 function mapProduct(row) {
   return {
@@ -19,7 +20,7 @@ function mapProduct(row) {
   };
 }
 
-function mapSettings(row) {
+function mapSettings(row, aboutContent, aboutContentAvailable) {
   return {
     brandTitle: row.brand_title,
     tagline: row.tagline,
@@ -36,6 +37,8 @@ function mapSettings(row) {
       location: row.location,
     },
     features: row.features ?? [],
+    aboutContent,
+    aboutContentAvailable,
     footerTitle: row.footer_title,
     footerCopyright: row.footer_copyright,
     footerDisclaimer: row.footer_disclaimer,
@@ -43,6 +46,20 @@ function mapSettings(row) {
     comingSoonTitle: row.coming_soon_title,
     visibility: row.visibility ?? {},
   };
+}
+
+async function getAboutContentSettings() {
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("about_content")
+    .eq("id", "storefront")
+    .maybeSingle();
+  if (error?.code === "42703") {
+    return { content: DEFAULT_ABOUT_CONTENT, available: false };
+  }
+  if (error) throw error;
+
+  return { content: normalizeAboutContent(data?.about_content), available: true };
 }
 
 export async function getCatalog(onSettingsLoaded) {
@@ -61,11 +78,13 @@ export async function getCatalog(onSettingsLoaded) {
     .select("logo_url, favicon_url, color_palette, loading_screen, admin_brand, hero_pills, brand_title, tagline, whatsapp_number, phone_display, email, location, features, footer_title, footer_copyright, footer_disclaimer, footer_version, coming_soon_title, visibility")
     .eq("id", "storefront")
     .maybeSingle();
-  const settingsPromise = settingsRequest.then((result) => {
-    if (!result.error && result.data) onSettingsLoaded?.(mapSettings(result.data));
-    return result;
+  const settingsPromise = Promise.all([settingsRequest, getAboutContentSettings()]).then(([result, about]) => {
+    if (!result.error && result.data) {
+      onSettingsLoaded?.(mapSettings(result.data, about.content, about.available));
+    }
+    return { result, about };
   });
-  const [productsResult, sectionsResult, mainSectionsResult, settingsResult] = await Promise.all([
+  const [productsResult, sectionsResult, mainSectionsResult, settingsBundle] = await Promise.all([
     supabase
       .from("products")
       .select("*")
@@ -82,6 +101,7 @@ export async function getCatalog(onSettingsLoaded) {
       .order("display_order", { ascending: true }),
     settingsPromise,
   ]);
+  const { result: settingsResult, about } = settingsBundle;
 
   if (productsResult.error || sectionsResult.error || mainSectionsResult.error || settingsResult.error) {
     return {
@@ -108,7 +128,7 @@ export async function getCatalog(onSettingsLoaded) {
     products: productsResult.data.map(mapProduct),
     sections: sectionsResult.data,
     mainSections: mainSectionsResult.data,
-    settings: mapSettings(row),
+    settings: mapSettings(row, about.content, about.available),
     error: null,
   };
 }
