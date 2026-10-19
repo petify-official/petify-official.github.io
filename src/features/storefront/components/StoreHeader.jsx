@@ -21,6 +21,10 @@ export default function StoreHeader({ brandTitle, tagline, logoUrl, heroPills, v
             : <span className="pill" key={pill.id}>{pill.label}</span>)}
         </div>
       )}
+      <nav className="store-nav" aria-label="Main navigation">
+        <a href="#top">Shop</a>
+        <a href="#about">About us</a>
+      </nav>
     </header>
   );
 }

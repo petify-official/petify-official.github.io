@@ -4,3 +4,35 @@ git push origin new-main
 
 
 after vercel app
+
+PETIFY PROJECT IDEA
+
+1. BRAND VISION AND EXPERIENCE
+Petify is a premium, nature-connected destination for exotic pet enthusiasts. The
+experience should help keepers discover animals and the care essentials they need,
+while making responsible, informed pet care central to the brand.
+
+Use a clean, modern visual identity built around electric deep blue and crisp white,
+with emerald green, aqua teal, and amber gold accents. Bring in subtle organic and
+aquatic inspiration, gentle glass-like surfaces, clear typography, and purposeful
+micro-interactions.
+
+2. CATALOG AND PRODUCT ROADMAP
+Available-now catalog:
+- Exotic fish, marine life, and selected small mammals or reptiles.
+- Species-specific foods, bio-diets, and nutrition.
+- Enclosures, cages, terrariums, and aquariums.
+
+Coming soon:
+- Smart habitat accessories, including misting and heating systems, lighting,
+  enrichment, and habitat decor. Keep these clearly distinct from products that
+  are currently available.
+
+Future platform capabilities:
+- Recommend compatible food and habitat products when a keeper selects a species.
+- Capture interest in upcoming products with email sign-up and species preferences.
+- Add an interactive enclosure configurator and a care and feeding tracker.
+
+IMPLEMENTATION NOTE
+Keep the storefront, catalog data, and future keeper tools modular so the experience
+can grow without confusing available inventory with planned products.

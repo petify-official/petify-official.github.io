@@ -5,6 +5,7 @@ import FeatureList from "./features/storefront/components/FeatureList.jsx";
 import ScrollToTop from "./features/storefront/components/ScrollToTop.jsx";
 import StoreFooter from "./features/storefront/components/StoreFooter.jsx";
 import StoreHeader from "./features/storefront/components/StoreHeader.jsx";
+import AboutUs from "./features/storefront/components/AboutUs.jsx";
 import useStorefrontCatalog from "./features/storefront/useStorefrontCatalog.js";
 import {
   DEFAULT_LOADING_SCREEN,
@@ -19,6 +20,7 @@ export default function App() {
   const { products, sections, mainSections, settings, loading, error } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
+  const isAboutRoute = routeHash === "#about";
   const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings" || routeHash === "#admin-products";
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
@@ -106,6 +108,8 @@ export default function App() {
       />
     </Suspense>
   );
+
+  if (isAboutRoute) return <AboutUs />;
 
   return (
     <>
