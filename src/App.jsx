@@ -137,7 +137,7 @@ export default function App() {
         )}
       </main>
       {!loading && !error && settings && (settings.visibility.footer ?? true) && (
-        <StoreFooter footerTitle={settings.footerTitle} footerCopyright={settings.footerCopyright} footerDisclaimer={settings.footerDisclaimer} contact={settings.contact} visibility={settings.visibility} />
+        <StoreFooter footerTitle={settings.footerTitle} footerCopyright={settings.footerCopyright} footerDisclaimer={settings.footerDisclaimer} footerVersion={settings.footerVersion} contact={settings.contact} visibility={settings.visibility} />
       )}
       {showScrollTop && <ScrollToTop onClick={scrollToTop} />}
     </>

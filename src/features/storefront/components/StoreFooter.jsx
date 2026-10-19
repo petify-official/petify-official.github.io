@@ -1,4 +1,4 @@
-export default function StoreFooter({ footerTitle, footerCopyright, footerDisclaimer, contact, visibility }) {
+export default function StoreFooter({ footerTitle, footerCopyright, footerDisclaimer, footerVersion, contact, visibility }) {
   return (
     <footer id="site-footer">
       <h3>{footerTitle}</h3>
@@ -9,6 +9,7 @@ export default function StoreFooter({ footerTitle, footerCopyright, footerDiscla
       </div>
       {(visibility.footer_copyright ?? true) && <p className="footer-legal">{footerCopyright}</p>}
       {(visibility.footer_disclaimer ?? true) && <p className="footer-legal">{footerDisclaimer}</p>}
+      {(visibility.footer_version ?? true) && <p className="footer-legal">Version {footerVersion}</p>}
     </footer>
   );
 }

@@ -39,6 +39,7 @@ function mapSettings(row) {
     footerTitle: row.footer_title,
     footerCopyright: row.footer_copyright,
     footerDisclaimer: row.footer_disclaimer,
+    footerVersion: row.footer_version,
     comingSoonTitle: row.coming_soon_title,
     visibility: row.visibility ?? {},
   };
@@ -57,7 +58,7 @@ export async function getCatalog(onSettingsLoaded) {
 
   const settingsRequest = supabase
     .from("site_settings")
-    .select("logo_url, favicon_url, color_palette, loading_screen, admin_brand, hero_pills, brand_title, tagline, whatsapp_number, phone_display, email, location, features, footer_title, footer_copyright, footer_disclaimer, coming_soon_title, visibility")
+    .select("logo_url, favicon_url, color_palette, loading_screen, admin_brand, hero_pills, brand_title, tagline, whatsapp_number, phone_display, email, location, features, footer_title, footer_copyright, footer_disclaimer, footer_version, coming_soon_title, visibility")
     .eq("id", "storefront")
     .maybeSingle();
   const settingsPromise = settingsRequest.then((result) => {

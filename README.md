@@ -13,7 +13,7 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL Editor.
 3. Run `supabase/admin.sql` to create the admin role, product write policies, and public image bucket.
-4. Run `supabase/catalog-sections.sql` to add configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, and storefront visibility. Subsections can be assigned to a main section or left standalone. Rerun this script after updates to apply later additions; it is safe to rerun.
+4. Run `supabase/catalog-sections.sql` to add configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone. Rerun this script after updates to apply later additions; it is safe to rerun.
 5. Run `supabase/sales.sql` to enable the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. Run it after `admin.sql` and `catalog-sections.sql`; it is safe to rerun.
 6. Run `supabase/inventory-dashboard.sql` after `sales.sql` to add admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales. This script is safe to rerun.
 7. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.

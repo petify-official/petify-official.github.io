@@ -15,6 +15,7 @@ const visibilityOptions = [
   ["footer", "Contact and footer"],
   ["footer_copyright", "Copyright note"],
   ["footer_disclaimer", "Store disclaimer"],
+  ["footer_version", "Version number"],
 ];
 
 export default function StorefrontContentEditor({ userId }) {
@@ -106,6 +107,7 @@ export default function StorefrontContentEditor({ userId }) {
           <label>Coming soon title<input value={content.comingSoonTitle} onChange={(event) => update("comingSoonTitle", event.target.value)} required /></label>
           <label>Copyright note<input value={content.footerCopyright} onChange={(event) => update("footerCopyright", event.target.value)} required /></label>
           <label>Store disclaimer<input value={content.footerDisclaimer} onChange={(event) => update("footerDisclaimer", event.target.value)} required /></label>
+          <label>Version number<input value={content.footerVersion} onChange={(event) => update("footerVersion", event.target.value)} required /></label>
           <fieldset className="admin-visibility-list admin-span-two">
             <legend>Storefront visibility</legend>
             {visibilityOptions.map(([field, label]) => (

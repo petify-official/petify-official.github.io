@@ -162,6 +162,7 @@ alter table public.site_settings
   ]'::jsonb,
   add column if not exists footer_title text not null default 'Petify Group',
   add column if not exists footer_legal text not null default '© Petify Group. All rights reserved. *Not for human consumption. Store in a cool, dry place.',
+  add column if not exists footer_version text not null default '1.0.0',
   add column if not exists coming_soon_title text not null default 'Something big is coming soon',
   add column if not exists visibility jsonb not null default '{
     "brand": true,
@@ -172,7 +173,8 @@ alter table public.site_settings
     "coming_soon": true,
     "footer": true,
     "footer_copyright": true,
-    "footer_disclaimer": true
+    "footer_disclaimer": true,
+    "footer_version": true
   }'::jsonb;
 
 do $$

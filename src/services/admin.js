@@ -128,7 +128,7 @@ export async function getHeroPills() {
 export async function getStorefrontContent() {
   const { data, error } = await supabase
     .from("site_settings")
-    .select("brand_title, tagline, whatsapp_number, phone_display, email, location, features, footer_title, footer_copyright, footer_disclaimer, coming_soon_title, visibility")
+    .select("brand_title, tagline, whatsapp_number, phone_display, email, location, features, footer_title, footer_copyright, footer_disclaimer, footer_version, coming_soon_title, visibility")
     .eq("id", "storefront")
     .maybeSingle();
   if (error) throw error;
@@ -145,6 +145,7 @@ export async function getStorefrontContent() {
     footerTitle: data.footer_title,
     footerCopyright: data.footer_copyright,
     footerDisclaimer: data.footer_disclaimer,
+    footerVersion: data.footer_version,
     comingSoonTitle: data.coming_soon_title,
     visibility: data.visibility ?? {},
   };
@@ -164,6 +165,7 @@ export async function saveStorefrontContent(content) {
       footer_title: content.footerTitle,
       footer_copyright: content.footerCopyright,
       footer_disclaimer: content.footerDisclaimer,
+      footer_version: content.footerVersion,
       coming_soon_title: content.comingSoonTitle,
       visibility: content.visibility,
       updated_at: new Date().toISOString(),
