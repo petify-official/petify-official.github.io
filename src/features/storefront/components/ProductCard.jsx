@@ -1,93 +1,125 @@
-import { useState } from "react";
-import { formatProductPrice, productOptions } from "../../../lib/productPricing.js";
-import ProductGallery from "./ProductGallery.jsx";
+import { useCallback, useState } from "react";
+import { formatProductPrice, parseProductPrice, productOptions } from "../../../lib/productPricing.js";
+import ProductDetailsDialog from "./ProductDetailsDialog.jsx";
+import ProductOrderLink from "./ProductOrderLink.jsx";
 
-function OrderLink({ product, whatsappNumber, combo, variant }) {
-  const message = variant?.label
-    ? `${product.defaultWhatsappMsg}\nOption: ${variant.label}\nPrice: ${formatProductPrice(variant.price)}`
-    : product.defaultWhatsappMsg;
-  const link = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-  return <a href={link} className="btn btn-direct-order" target="_blank" rel="noopener noreferrer">{combo ? "Order Combo via WhatsApp" : "Order directly via WhatsApp"}</a>;
-}
+const placeholderImage = "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='300'%3E%3Crect width='100%25' height='100%25' fill='%23e2e8f0'/%3E%3Ctext x='50%25' y='50%25' fill='%2394a3b8' font-family='sans-serif' font-size='16' text-anchor='middle' dy='.3em'%3ENo Image%3C/text%3E";
 
 export default function ProductCard({ product, whatsappNumber, onAddToCart }) {
-  const combo = product.type === "combo";
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const closeDetails = useCallback(() => setIsDetailsOpen(false), []);
   const variants = productOptions(product);
+  const isVariantProduct = Boolean(product.variants?.length);
   const [selectedVariantId, setSelectedVariantId] = useState(variants[0]?.id ?? "");
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? variants[0];
-  const isVariantProduct = Boolean(product.variants?.length);
-  const displayPrice = isVariantProduct ? formatProductPrice(selectedVariant?.price) : product.price;
-  const displayOldPrice = isVariantProduct
-    ? (selectedVariant?.oldPrice ? formatProductPrice(selectedVariant.oldPrice) : "")
-    : product.oldPrice;
+  const price = isVariantProduct ? selectedVariant?.price : parseProductPrice(product.price);
+  const hasPrice = isVariantProduct ? Boolean(selectedVariant) : Boolean(product.price);
   const canAddToCart = Boolean(selectedVariant && selectedVariant.price > 0);
+  const combo = product.type === "combo";
+  const image = product.images?.[0] || placeholderImage;
+  const titleId = `product-title-${product.id}`;
 
   return (
-    <article className={`card${combo ? " combo-card" : ""}`}>
-      {combo && <span className="save-tag">{product.saveTag}</span>}
-      <ProductGallery product={product} />
-      <div className="card-content">
-        <span className="card-badge">{product.badge}</span>
-        <h3>{product.title}</h3>
-        <p>{product.description}</p>
-        {!combo && product.specs?.length > 0 && (
-          <ul className="specs">
-            {product.specs.map((spec) => {
-              const labelEnd = spec.indexOf("</strong>");
-              const hasLabel = spec.startsWith("<strong>") && labelEnd !== -1;
-              return <li key={spec}>{hasLabel ? <><strong>{spec.slice(8, labelEnd)}</strong>{spec.slice(labelEnd + 9)}</> : spec}</li>;
-            })}
-          </ul>
-        )}
-      </div>
-      {isVariantProduct && (
-        <div className="price-box price-box-variants">
-          <span className="price-box-heading">Available sizes & prices</span>
-          <div className="product-variant-prices" role="radiogroup" aria-label={`${product.title} sizes and prices`}>
-            {variants.map((variant) => (
-              <label className="product-variant-price" key={variant.id}>
-                <input
-                  type="radio"
-                  name={`variant-${product.id}`}
-                  value={variant.id}
-                  checked={variant.id === selectedVariantId}
-                  onChange={() => setSelectedVariantId(variant.id)}
-                  aria-label={`${variant.label}, ${formatProductPrice(variant.price)}`}
-                />
-                <span className="product-variant-label">{variant.label}</span>
-                <span className="product-variant-amounts">
-                  <strong className="price">{formatProductPrice(variant.price)}</strong>
-                  {variant.oldPrice > variant.price && (
-                    <span className="old-price">{formatProductPrice(variant.oldPrice)}</span>
-                  )}
-                </span>
+    <>
+      <article className={`card product-list-card${product.type === "combo" ? " combo-card" : ""}`}>
+        <div className="product-tile">
+          <button
+            className="product-tile-image-button"
+            type="button"
+            onClick={() => setIsDetailsOpen(true)}
+            aria-label={`View ${product.title} images and details`}
+          >
+            <img
+              className="product-tile-image"
+              src={image}
+              alt={product.title}
+              loading="lazy"
+              decoding="async"
+              onError={(event) => { event.currentTarget.src = placeholderImage; }}
+            />
+          </button>
+          <div className="product-tile-content">
+            <div className="product-tile-heading">
+              <div className="product-tile-title-group">
+                <h3 id={titleId}>{product.title}</h3>
+                {(product.badge || (combo && product.saveTag)) && (
+                  <div className="product-tile-labels">
+                    {product.badge && <span className="product-summary-badge">{product.badge}</span>}
+                    {combo && product.saveTag && <span className="product-summary-badge product-tile-savings">{product.saveTag}</span>}
+                  </div>
+                )}
+              </div>
+              <button
+                className="product-tile-details"
+                type="button"
+                onClick={() => setIsDetailsOpen(true)}
+                aria-label={`More details about ${product.title}`}
+                aria-haspopup="dialog"
+              >
+                Details <span aria-hidden="true">›</span>
+              </button>
+            </div>
+            {isVariantProduct && variants.length > 1 && (
+              <label className="product-tile-variant">
+                <span>Size</span>
+                <select
+                  value={selectedVariantId}
+                  onChange={(event) => setSelectedVariantId(event.target.value)}
+                  aria-label={`Choose size for ${product.title}`}
+                >
+                  {variants.map((variant) => (
+                    <option key={variant.id} value={variant.id}>
+                      {variant.label} — {formatProductPrice(variant.price)}
+                    </option>
+                  ))}
+                </select>
               </label>
-            ))}
+            )}
+            <div className="product-tile-purchase">
+              <div className="product-tile-price">
+                <strong>{hasPrice ? formatProductPrice(price) : "Price on request"}</strong>
+                {isVariantProduct && variants.length === 1 && (
+                  <span>{selectedVariant.label}</span>
+                )}
+                {!isVariantProduct && product.oldPrice && (
+                  <del>{product.oldPrice}</del>
+                )}
+              </div>
+              <div className="product-tile-actions">
+                <button
+                  className="btn btn-add-to-cart product-tile-add"
+                  type="button"
+                  disabled={!canAddToCart}
+                  onClick={() => onAddToCart(product, selectedVariant)}
+                  aria-label={canAddToCart ? `Add ${product.title}${selectedVariant?.label ? `, ${selectedVariant.label}` : ""} to cart` : `${product.title} price unavailable`}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 7h12l1 14H5L6 7Z" />
+                    <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+                  </svg>
+                  <span>Add to cart</span>
+                </button>
+                <ProductOrderLink
+                  product={product}
+                  whatsappNumber={whatsappNumber}
+                  combo={combo}
+                  variant={isVariantProduct ? selectedVariant : null}
+                  compact
+                />
+              </div>
+            </div>
           </div>
         </div>
+      </article>
+      {isDetailsOpen && (
+        <ProductDetailsDialog
+          product={product}
+          whatsappNumber={whatsappNumber}
+          onAddToCart={onAddToCart}
+          onClose={closeDetails}
+          initialVariantId={selectedVariantId}
+        />
       )}
-      {!isVariantProduct && (displayPrice || displayOldPrice) && (
-        <div className="price-box">
-          <span className="price">{displayPrice}</span>
-          {displayOldPrice && <span className="old-price">{displayOldPrice}</span>}
-        </div>
-      )}
-      <div className="card-actions">
-        <button
-          className="btn btn-add-to-cart"
-          type="button"
-          disabled={!canAddToCart}
-          onClick={() => onAddToCart(product, selectedVariant)}
-          title={canAddToCart ? `Add ${product.title} to cart` : "Price unavailable; order directly via WhatsApp"}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M6 7h12l1 14H5L6 7Z" />
-            <path d="M9 8V6a3 3 0 0 1 6 0v2" />
-          </svg>
-          <span>Add to cart</span>
-        </button>
-        <OrderLink product={product} whatsappNumber={whatsappNumber} combo={combo} variant={isVariantProduct ? selectedVariant : null} />
-      </div>
-    </article>
+    </>
   );
 }
