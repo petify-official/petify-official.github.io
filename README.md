@@ -11,25 +11,29 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 ## Connect Supabase and enable admin product management
 
 1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL Editor.
-3. Run `supabase/admin.sql` to create the admin role, product write policies, and public image bucket.
-4. Run `supabase/catalog-sections.sql` to add configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, the editable About page, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone. Rerun this script after updates to apply later additions, including the About page settings column; it is safe to rerun.
-5. Run `supabase/sales.sql` to enable the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. Run it after `admin.sql` and `catalog-sections.sql`; it is safe to rerun.
-6. Run `supabase/inventory-dashboard.sql` after `sales.sql` to add admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales. This script is safe to rerun.
-7. Run `supabase/seed.sql` to insert the current product details. Seeded products start without photos; upload their photos from the admin page.
-8. In Supabase Authentication, create your account. Do not enable public sign-ups.
-9. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
+2. Run the numbered SQL modules in `supabase/` in order:
+   1. `core-schema-01.sql` creates the base product table and public catalog policy.
+   2. `admin-access-02.sql` creates admin access, product write policies, and the public image bucket.
+   3. `catalog-sections-03.sql` adds configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, the editable About page, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone.
+   4. `sales-04.sql` enables the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. It depends on the admin and catalog modules.
+   5. `admin-sales-editing-05.sql` applies the Sales editing permissions and manual-sale functions. It depends on the Sales module.
+   6. `inventory-dashboard-06.sql` adds admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales.
+   7. `product-seed-07.sql` inserts or updates the current product details. Seeded products start without photos; upload their photos from the admin page.
+
+   The numbers indicate dependency order. These scripts create or update schema; they do not drop tables or erase existing data. Rerun them in order when applying schema updates. The catalog module is safe to rerun, including its later additions to store settings.
+3. In Supabase Authentication, create your account. Do not enable public sign-ups.
+4. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
 
    ```sql
    insert into public.admin_users (user_id)
    values ('YOUR_AUTH_USER_UUID');
    ```
 
-9. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
-10. Visit `/#admin`, sign in with the account you created, and manage products. Create, rename, reorder, or delete main sections and subsections from the Products page, and optionally group subsections under a main section. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
-11. Open `/#petify-dashboard` to use the Sales board (or `/petify-dashboard` on hosts configured with SPA path fallback). Admins and assigned Sales users can sign in; administrators can also open it from the admin navigation. Configure Sales access and invoice settings under **Admin → Site settings → Sales settings**.
-12. To add multi-size or multi-quantity products, edit a product, enable **This product has purchasable varieties with different prices**, then add an option label and its price for each size/pack (for example, `250 g`, `500 g`, and `1 kg`). Prices can be entered with or without thousands separators (for example, `1,299`); they are stored as numbers and displayed with Indian currency formatting. Each option gets its own formatted price on the storefront and is included in WhatsApp order messages and Sales invoices.
-13. Admin and Sales sessions automatically sign out after 10 hours from sign-in. For server-enforced session expiration (including API access outside this UI), set the Supabase Auth session time-box to 10 hours in the project's Auth settings. The app also enforces the 10-hour limit in open and reopened dashboard tabs.
+5. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
+6. Visit `/#admin`, sign in with the account you created, and manage products. Create, rename, reorder, or delete main sections and subsections from the Products page, and optionally group subsections under a main section. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
+7. Open `/#petify-dashboard` to use the Sales board (or `/petify-dashboard` on hosts configured with SPA path fallback). Admins and assigned Sales users can sign in; administrators can also open it from the admin navigation. Configure Sales access and invoice settings under **Admin → Site settings → Sales settings**.
+8. To add multi-size or multi-quantity products, edit a product, enable **This product has purchasable varieties with different prices**, then add an option label and its price for each size/pack (for example, `250 g`, `500 g`, and `1 kg`). Prices can be entered with or without thousands separators (for example, `1,299`); they are stored as numbers and displayed with Indian currency formatting. Each option gets its own formatted price on the storefront and is included in WhatsApp order messages and Sales invoices.
+9. Admin and Sales sessions automatically sign out after 10 hours from sign-in. For server-enforced session expiration (including API access outside this UI), set the Supabase Auth session time-box to 10 hours in the project's Auth settings. The app also enforces the 10-hour limit in open and reopened dashboard tabs.
 
 Only the public anon key belongs in this frontend. Never put a service-role key in a `VITE_` variable. Visitors can read active products; catalog writes require the assigned admin role. Sales access requires either the admin role or an explicitly assigned Sales role.
 

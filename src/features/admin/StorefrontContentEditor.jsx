@@ -119,7 +119,7 @@ export default function StorefrontContentEditor({ userId }) {
             <p>These details appear under About us in the storefront menu.</p>
             {!content.aboutContentAvailable && (
               <AdminNotice kind="info">
-                About copy is using starter text until the database update is applied. Run <code>supabase/catalog-sections.sql</code> to enable editing.
+                About copy is using starter text until the database update is applied. Run <code>supabase/catalog-sections-03.sql</code> to enable editing.
               </AdminNotice>
             )}
             {Object.entries({

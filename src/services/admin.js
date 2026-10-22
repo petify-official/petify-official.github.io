@@ -349,7 +349,7 @@ export async function uploadProductImages(productId, files, onProgress, options 
       upsert: false,
     });
     if (error?.message === "Bucket not found") {
-      throw new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/admin.sql in the Supabase SQL Editor, then try again.`);
+      throw new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/admin-access-02.sql in the Supabase SQL Editor, then try again.`);
     }
     if (error) throw error;
 
