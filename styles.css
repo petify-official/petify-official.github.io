@@ -4613,6 +4613,7 @@ body:has(#site-header) {
 }
 
 .category-chip {
+  position: relative;
   display: inline-flex;
   min-height: 48px;
   flex: 0 0 auto;
@@ -4629,6 +4630,18 @@ body:has(#site-header) {
   cursor: pointer;
   scroll-snap-align: start;
   transition: color 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.category-chip + .category-chip::before {
+  position: absolute;
+  top: 50%;
+  left: -0.48rem;
+  width: 1px;
+  height: 1.15rem;
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  content: "";
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .category-chip:hover {

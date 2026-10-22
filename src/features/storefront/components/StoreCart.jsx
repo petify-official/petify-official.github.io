@@ -7,18 +7,22 @@ function cartOrderLink(items, whatsappNumber, total, customer) {
     const option = item.variantLabel ? ` (${item.variantLabel})` : "";
     return `• ${item.title}${option}\n  Qty: ${item.quantity} × ${formatProductPrice(item.price)} = ${formatProductPrice(item.price * item.quantity)}`;
   });
-  const message = [
-    "Hello! I'd like to place an order:",
-    "",
-    ...lines,
-    "",
-    `Grand total: ${formatProductPrice(total)}`,
+  const customerDetails = [
     customer.name ? `Name: ${customer.name}` : "",
     customer.address ? `Address: ${customer.address}` : "",
     customer.note ? `Note: ${customer.note}` : "",
+  ].filter(Boolean);
+  const message = [
+    "Hello! I'd like to place an order:",
+    "",
+    lines.join("\n\n"),
+    "",
+    `Grand total: ${formatProductPrice(total)}`,
+    customerDetails.length ? "" : null,
+    ...customerDetails,
     "",
     "Please confirm availability and delivery details.",
-  ].filter(Boolean).join("\n");
+  ].filter((line) => line !== null).join("\n");
   const phone = String(whatsappNumber ?? "").replace(/\D/g, "");
 
   return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : "";

@@ -2,17 +2,14 @@ import { formatProductPrice, parseProductPrice } from "../../../lib/productPrici
 
 export default function ProductOrderLink({ product, whatsappNumber, combo, variant, compact = false }) {
   const price = variant?.price ?? parseProductPrice(product.price);
-  const productUrl = new URL(window.location.href);
-  productUrl.searchParams.set("product", String(product.id));
-  if (variant?.id) productUrl.searchParams.set("variant", String(variant.id));
-  productUrl.hash = "";
-  const message = [
+  const productDetails = [
     `Hello, I'm interested in ${product.title}.`,
     variant?.label ? `Option: ${variant.label}` : "",
     price ? `Price: ${formatProductPrice(price)}` : "",
-    `Product link: ${productUrl.toString()}`,
-    product.defaultWhatsappMsg ? `\n${product.defaultWhatsappMsg}` : "",
   ].filter(Boolean).join("\n");
+  const message = [productDetails, product.defaultWhatsappMsg?.trim()]
+    .filter(Boolean)
+    .join("\n\n");
   const phone = String(whatsappNumber ?? "").replace(/\D/g, "");
   const link = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : "";
 
