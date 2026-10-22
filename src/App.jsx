@@ -21,7 +21,28 @@ import {
 
 const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
+const StorekeepingApp = lazy(() => import("./features/storekeeping/StorekeepingApp.jsx"));
 const CART_STORAGE_KEY = "petify-store-cart";
+
+export default function App() {
+  const [routeHash, setRouteHash] = useState(window.location.hash);
+
+  useEffect(() => {
+    const updateRoute = () => setRouteHash(window.location.hash);
+    window.addEventListener("hashchange", updateRoute);
+    return () => window.removeEventListener("hashchange", updateRoute);
+  }, []);
+
+  if (routeHash === "#store-keeping") {
+    return (
+      <Suspense fallback={<div className="storekeeping-loading">Opening Storekeeping...</div>}>
+        <StorekeepingApp />
+      </Suspense>
+    );
+  }
+
+  return <StorefrontApp />;
+}
 
 function readStoredCart() {
   try {
@@ -47,7 +68,7 @@ function readStoredCart() {
   }
 }
 
-export default function App() {
+function StorefrontApp() {
   const {
     products,
     totalProducts,

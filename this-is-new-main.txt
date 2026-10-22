@@ -5,3 +5,4 @@ git push origin phase-1
 npm run build
 npm run deploy
 
+reorder and restruecture current sql  codes by modulurizing its features with its name before 01 02 in order of which code we wanna run if we wanna recreate the tables again just in case
