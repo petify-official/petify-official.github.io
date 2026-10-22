@@ -4712,8 +4712,28 @@ body:has(#site-header) {
   text-align: left;
 }
 
+.catalog-main-group + .catalog-main-group,
+.catalog-product-group + .catalog-product-group {
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--primary) 20%, white);
+}
+
+.catalog-main-group > .section-title {
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid color-mix(in srgb, var(--primary) 22%, white);
+}
+
+.catalog-product-group.is-subcategory {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 16%, white);
+}
+
 .catalog-subsection-title {
   margin: 1rem 0 0.65rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 58%, var(--accent));
   color: var(--text-dark);
   font-size: 1.1rem;
   text-align: left;

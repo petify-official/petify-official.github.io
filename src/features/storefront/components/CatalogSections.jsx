@@ -65,7 +65,11 @@ export default function CatalogSections({
     const sectionProducts = visibleBySection.get(section.id) ?? [];
     if (!sectionProducts.length) return null;
     return (
-      <section key={section.id} aria-labelledby={`catalog-section-${section.id}`}>
+      <section
+        className={`catalog-product-group${nested ? " is-subcategory" : ""}`}
+        key={section.id}
+        aria-labelledby={`catalog-section-${section.id}`}
+      >
         {nested
           ? <h3 className="catalog-subsection-title" id={`catalog-section-${section.id}`}>{section.title}</h3>
           : <h2 className="section-title" id={`catalog-section-${section.id}`}>{section.title}</h2>}
@@ -161,7 +165,11 @@ export default function CatalogSections({
             const childrenWithProducts = childSections.filter((section) => visibleBySection.has(section.id));
             if (!childrenWithProducts.length) return null;
             return (
-              <section key={mainSection.id} aria-labelledby={`catalog-main-section-${mainSection.id}`}>
+              <section
+                className="catalog-main-group"
+                key={mainSection.id}
+                aria-labelledby={`catalog-main-section-${mainSection.id}`}
+              >
                 <h2 className="section-title" id={`catalog-main-section-${mainSection.id}`}>{mainSection.title}</h2>
                 {childrenWithProducts.map((section) => renderSection(section, true))}
               </section>
