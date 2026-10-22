@@ -579,7 +579,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
             ) : (
               <>
               <div className="admin-page-heading">
-                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Organize products into subsections and optional main sections.</p></div>
+                <div><p className="admin-eyebrow">CATALOG MANAGEMENT</p><h1>Products</h1><p className="admin-muted">Search, filter and update your store catalog.</p></div>
               </div>
               <div className={`admin-create-fab${createFabVisible ? "" : " is-scroll-hidden"}`} aria-hidden={!createFabVisible} inert={!createFabVisible}>
                 {addingMainSection ? (
@@ -672,6 +672,23 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                 </AdminButton>
                 <span className="admin-product-result-count">{filteredProducts.length} products</span>
               </div>
+              <div className="admin-product-quick-filters" role="group" aria-label="Filter products by visibility">
+                {[
+                  { value: "all", label: "All" },
+                  { value: "active", label: "Visible" },
+                  { value: "hidden", label: "Hidden" },
+                ].map((filter) => (
+                  <button
+                    key={filter.value}
+                    className={`admin-product-quick-filter${productStatusFilter === filter.value ? " active" : ""}`}
+                    type="button"
+                    aria-pressed={productStatusFilter === filter.value}
+                    onClick={() => setProductStatusFilter(filter.value)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
               {productDrafts.length > 0 && (
                 <section className="admin-saved-drafts" aria-label="Saved product drafts">
                   <h2>Product drafts</h2>
@@ -698,7 +715,14 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                   </ul>
                 </section>
               )}
-              <section className="admin-section-order" aria-labelledby="admin-main-section-order-title">
+              <details className="admin-catalog-organization">
+                <summary>
+                  <span className="admin-catalog-organization-summary">
+                    <strong>Organize catalog</strong>
+                    <small>{mainSections.length} groups · {sections.length} subsections</small>
+                  </span>
+                </summary>
+                <section className="admin-section-order" aria-labelledby="admin-main-section-order-title">
                 <div className="admin-section-order-heading">
                   <div>
                     <h2 id="admin-main-section-order-title">Main sections</h2>
@@ -735,8 +759,8 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                     ))}
                   </ol>
                 ) : <p className="admin-empty-sections">No main sections yet. Use <strong>Create</strong> to make a top-level group.</p>}
-              </section>
-              <section className="admin-section-order" aria-labelledby="admin-section-order-title">
+                </section>
+                <section className="admin-section-order" aria-labelledby="admin-section-order-title">
                   <div className="admin-section-order-heading">
                     <div>
                       <h2 id="admin-section-order-title">Subsections</h2>
@@ -780,7 +804,8 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
                     ))}
                   </ol>
                   ) : <p className="admin-empty-sections">No subsections yet. Use <strong>Create</strong> to add one.</p>}
-              </section>
+                </section>
+              </details>
               {error && <AdminNotice kind="error">{error}</AdminNotice>}
               {loading ? <AdminState kind="loading" description="Loading products..." /> : (
                 <div className="admin-table-wrap">
