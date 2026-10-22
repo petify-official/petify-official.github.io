@@ -87,9 +87,10 @@ export async function getCatalog(onSettingsLoaded) {
   const [productsResult, sectionsResult, mainSectionsResult, settingsBundle] = await Promise.all([
     supabase
       .from("products")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("is_active", true)
-      .order("display_order", { ascending: true }),
+      .order("display_order", { ascending: true })
+      .range(0, 23),
     supabase
       .from("catalog_sections")
       .select("id, title, display_order, main_section_id")
@@ -117,6 +118,7 @@ export async function getCatalog(onSettingsLoaded) {
   if (!row) {
     return {
       products: productsResult.data.map(mapProduct),
+      totalProducts: productsResult.count ?? productsResult.data.length,
       sections: sectionsResult.data,
       mainSections: mainSectionsResult.data,
       settings: null,
@@ -126,9 +128,34 @@ export async function getCatalog(onSettingsLoaded) {
 
   return {
     products: productsResult.data.map(mapProduct),
+    totalProducts: productsResult.count ?? productsResult.data.length,
     sections: sectionsResult.data,
     mainSections: mainSectionsResult.data,
     settings: mapSettings(row, about.content, about.available),
     error: null,
   };
+}
+
+export async function getMoreCatalogProducts(offset, pageSize = 24) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  const { data, count, error } = await supabase
+    .from("products")
+    .select("*", { count: "exact" })
+    .eq("is_active", true)
+    .order("display_order", { ascending: true })
+    .range(offset, offset + pageSize - 1);
+  if (error) throw error;
+  return { products: data.map(mapProduct), totalProducts: count ?? offset + data.length };
+}
+
+export async function getCatalogProductsByIds(ids) {
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("is_active", true)
+    .in("id", ids);
+  if (error) throw error;
+  return data.map(mapProduct);
 }

@@ -11,7 +11,14 @@ export default function CatalogLoading({ content }) {
         </div>
       </div>
       <div className="catalog-loading-skeletons" aria-hidden="true">
-        {[0, 1, 2].map((item) => <span key={item} />)}
+        {[0, 1, 2, 3, 4, 5].map((item) => (
+          <div className="catalog-loading-card" key={item}>
+            <span />
+            <i />
+            <b />
+            <b />
+          </div>
+        ))}
       </div>
     </section>
   );

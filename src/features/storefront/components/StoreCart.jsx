@@ -1,30 +1,47 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatProductPrice } from "../../../lib/productPricing.js";
+import QuantityStepper from "./QuantityStepper.jsx";
 
-function cartOrderLink(items, whatsappNumber, total) {
+function cartOrderLink(items, whatsappNumber, total, customer) {
   const lines = items.map((item) => {
     const option = item.variantLabel ? ` (${item.variantLabel})` : "";
-    return `• ${item.title}${option} × ${item.quantity} — ${formatProductPrice(item.price * item.quantity)}`;
+    return `• ${item.title}${option}\n  Qty: ${item.quantity} × ${formatProductPrice(item.price)} = ${formatProductPrice(item.price * item.quantity)}`;
   });
   const message = [
-    "Hello Pëtify Team! I'd like to order:",
+    "Hello! I'd like to place an order:",
     "",
     ...lines,
     "",
-    `Total: ${formatProductPrice(total)}`,
+    `Grand total: ${formatProductPrice(total)}`,
+    customer.name ? `Name: ${customer.name}` : "",
+    customer.address ? `Address: ${customer.address}` : "",
+    customer.note ? `Note: ${customer.note}` : "",
     "",
     "Please confirm availability and delivery details.",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
+  const phone = String(whatsappNumber ?? "").replace(/\D/g, "");
 
-  return `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+  return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : "";
 }
 
-export default function StoreCart({ items, whatsappNumber, onClose, onUpdateQuantity, onRemoveItem, onRemoveAllItems }) {
+export default function StoreCart({
+  items,
+  whatsappNumber,
+  brandTitle,
+  canCheckout,
+  validationMessage,
+  onRetryValidation,
+  onClose,
+  onUpdateQuantity,
+  onRemoveItem,
+  onRemoveAllItems,
+}) {
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
+  const [customer, setCustomer] = useState({ name: "", address: "", note: "" });
   const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
   const totalPrice = items.reduce((total, item) => total + item.price * item.quantity, 0);
-  const checkoutLink = cartOrderLink(items, whatsappNumber, totalPrice);
+  const checkoutLink = cartOrderLink(items, whatsappNumber, totalPrice, customer);
 
   useEffect(() => {
     const previouslyFocused = document.activeElement;
@@ -40,7 +57,7 @@ export default function StoreCart({ items, whatsappNumber, onClose, onUpdateQuan
 
       if (event.key !== "Tab") return;
       const focusable = dialogRef.current?.querySelectorAll(
-        'a[href], button:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
       );
       if (!focusable?.length) return;
 
@@ -79,7 +96,7 @@ export default function StoreCart({ items, whatsappNumber, onClose, onUpdateQuan
         <div className="store-cart-header">
           <div>
             <p className="store-cart-eyebrow">YOUR SELECTION</p>
-            <h2 id="store-cart-title">Your Pëtify Cart</h2>
+            <h2 id="store-cart-title">Your {brandTitle} Cart</h2>
             <span className="store-cart-item-count">{totalQuantity} {totalQuantity === 1 ? "item" : "items"}</span>
           </div>
           <div className="store-cart-header-actions">
@@ -126,19 +143,12 @@ export default function StoreCart({ items, whatsappNumber, onClose, onUpdateQuan
                     <h3>{item.title}</h3>
                     {item.variantLabel && <span className="store-cart-item-option">{item.variantLabel}</span>}
                     <strong className="store-cart-item-unit-price">{formatProductPrice(item.price)} each</strong>
-                    <div className="store-cart-quantity" role="group" aria-label={`Quantity for ${item.title}`}>
-                      <button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.key, -1)}
-                        aria-label={`Decrease ${item.title} quantity`}
-                      >−</button>
-                      <span aria-live="polite">{item.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => onUpdateQuantity(item.key, 1)}
-                        aria-label={`Increase ${item.title} quantity`}
-                      >+</button>
-                    </div>
+                    <QuantityStepper
+                      value={item.quantity}
+                      label={`${item.title} quantity`}
+                      onDecrease={() => onUpdateQuantity(item.key, -1)}
+                      onIncrease={() => onUpdateQuantity(item.key, 1)}
+                    />
                   </div>
                   <div className="store-cart-item-total">
                     <strong>{formatProductPrice(item.price * item.quantity)}</strong>
@@ -152,17 +162,40 @@ export default function StoreCart({ items, whatsappNumber, onClose, onUpdateQuan
 
             <div className="store-cart-footer">
               <div className="store-cart-subtotal">
-                <span>Subtotal</span>
+                <span>Grand total</span>
                 <strong>{formatProductPrice(totalPrice)}</strong>
               </div>
               <p className="store-cart-note">Shipping and availability are confirmed by our team on WhatsApp.</p>
-              <a className="store-cart-checkout" href={checkoutLink} target="_blank" rel="noopener noreferrer">
+              <div className="store-cart-customer-fields">
+                <label>
+                  Name <span>(optional)</span>
+                  <input value={customer.name} onChange={(event) => setCustomer((current) => ({ ...current, name: event.target.value }))} autoComplete="name" />
+                </label>
+                <label>
+                  Address <span>(optional)</span>
+                  <textarea value={customer.address} onChange={(event) => setCustomer((current) => ({ ...current, address: event.target.value }))} autoComplete="street-address" rows="2" />
+                </label>
+                <label>
+                  Note <span>(optional)</span>
+                  <textarea value={customer.note} onChange={(event) => setCustomer((current) => ({ ...current, note: event.target.value }))} rows="2" />
+                </label>
+              </div>
+              {!canCheckout ? (
+                <div className="store-cart-validation" role="status" aria-live="polite">
+                  <p>{validationMessage}</p>
+                  {validationMessage.includes("paused") && (
+                    <button type="button" onClick={onRetryValidation}>Retry validation</button>
+                  )}
+                </div>
+              ) : checkoutLink ? (
+                <a className="store-cart-checkout" href={checkoutLink} target="_blank" rel="noopener noreferrer">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20.5 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20l1.2-4.6A8.5 8.5 0 1 1 20.5 11.5Z" />
                   <path d="M8.5 8.2c.5 2.7 2.1 4.3 4.8 5" />
                 </svg>
-                <span>Continue to WhatsApp</span>
-              </a>
+                  <span>Order via WhatsApp</span>
+                </a>
+              ) : <p className="store-cart-phone-error" role="alert">WhatsApp checkout is unavailable because a contact number has not been configured.</p>}
               <p className="store-cart-secure-note">Your order request opens directly in WhatsApp. No online payment is taken here.</p>
             </div>
           </>

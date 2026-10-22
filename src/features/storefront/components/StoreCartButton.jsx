@@ -11,7 +11,8 @@ export default function StoreCartButton({ itemCount, onClick, className }) {
         <path d="M9 8V6a3 3 0 0 1 6 0v2" />
       </svg>
       <span className="store-cart-button-label">Cart</span>
-      <span className="store-cart-count" aria-hidden="true">{itemCount}</span>
+      <span className="store-cart-count" key={itemCount} aria-hidden="true">{itemCount}</span>
+      <span className="visually-hidden" aria-live="polite" aria-atomic="true">Cart item count: {itemCount}</span>
     </button>
   );
 }

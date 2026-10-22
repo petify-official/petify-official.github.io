@@ -1,6 +1,6 @@
 git add .
-git commit -m "updated ui/ux - cart - about us"
-git push origin edits-2
+git commit -m "updated ui/ux"
+git push origin phase-1
 
 npm run build
 npm run deploy

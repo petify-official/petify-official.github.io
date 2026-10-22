@@ -8,18 +8,59 @@ import StoreCart from "./features/storefront/components/StoreCart.jsx";
 import StoreCartButton from "./features/storefront/components/StoreCartButton.jsx";
 import StoreFooter from "./features/storefront/components/StoreFooter.jsx";
 import StoreHeader from "./features/storefront/components/StoreHeader.jsx";
+import ProductDetailsDialog from "./features/storefront/components/ProductDetailsDialog.jsx";
+import { getCatalogProductsByIds } from "./services/catalog.js";
 import useStorefrontCatalog from "./features/storefront/useStorefrontCatalog.js";
+import { productOptions } from "./lib/productPricing.js";
 import {
   DEFAULT_LOADING_SCREEN,
   applyColorPalette,
+  normalizeColorPalette,
   normalizeLoadingScreen,
 } from "./config/siteAppearance.js";
 
 const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
+const CART_STORAGE_KEY = "petify-store-cart";
+
+function readStoredCart() {
+  try {
+    const rawCart = window.localStorage.getItem(CART_STORAGE_KEY);
+    if (!rawCart) return { items: [], notice: "" };
+    const items = JSON.parse(rawCart);
+    if (!Array.isArray(items)) throw new TypeError("Stored cart is not a list.");
+    const validItems = items.filter((item) => (
+      item
+      && typeof item.productId === "string"
+      && Number.isSafeInteger(item.quantity)
+      && item.quantity > 0
+      && Number.isFinite(item.price)
+      && item.price >= 0
+    ));
+    return {
+      items: validItems,
+      notice: validItems.length === items.length ? "" : "Some invalid items were removed from your saved cart.",
+    };
+  } catch (storageError) {
+    console.error("Could not restore the saved cart.", storageError);
+    return { items: [], notice: "Your saved cart could not be restored on this device." };
+  }
+}
 
 export default function App() {
-  const { products, sections, mainSections, settings, loading, error } = useStorefrontCatalog();
+  const {
+    products,
+    totalProducts,
+    sections,
+    mainSections,
+    settings,
+    loading,
+    loadingMore,
+    loadMoreError,
+    error,
+    retry,
+    loadMore,
+  } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
   const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings" || routeHash === "#admin-products";
@@ -27,15 +68,40 @@ export default function App() {
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
   const [showScrollTop, setShowScrollTop] = useState(window.scrollY > 320);
-  const [cart, setCart] = useState([]);
+  const [storedCart] = useState(readStoredCart);
+  const [cart, setCart] = useState(storedCart.items);
+  const [cartNotice, setCartNotice] = useState(storedCart.notice);
+  const [cartValidationError, setCartValidationError] = useState(false);
+  const [cartValidationAttempt, setCartValidationAttempt] = useState(0);
+  const [validatedProductIds, setValidatedProductIds] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [detailProductId, setDetailProductId] = useState(() => new URLSearchParams(window.location.search).get("product"));
+  const [detailVariantId, setDetailVariantId] = useState(() => new URLSearchParams(window.location.search).get("variant"));
+  const [sharedProduct, setSharedProduct] = useState(null);
+  const [productFetchError, setProductFetchError] = useState(null);
+  const [productFetchAttempt, setProductFetchAttempt] = useState(0);
   const pendingHeroTarget = useRef(null);
+  const validatedProducts = useRef(new Map());
+
+  useEffect(() => {
+    function handleCartStorageError() {
+      setCartNotice("Cart changes could not be saved on this device.");
+    }
+    window.addEventListener("petify-cart-storage-error", handleCartStorageError);
+    return () => window.removeEventListener("petify-cart-storage-error", handleCartStorageError);
+  }, []);
 
   useEffect(() => {
     const updateRoute = () => {
       setRouteHash(window.location.hash);
       setRoutePath(window.location.pathname.replace(/\/+$/, "") || "/");
+      const url = new URLSearchParams(window.location.search);
+      setDetailProductId(url.get("product"));
+      setDetailVariantId(url.get("variant"));
+      setProductFetchError(null);
     };
     window.addEventListener("hashchange", updateRoute);
     window.addEventListener("popstate", updateRoute);
@@ -44,6 +110,111 @@ export default function App() {
       window.removeEventListener("popstate", updateRoute);
     };
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setSearchQuery(searchInput), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch (storageError) {
+      console.error("Could not save the cart on this device.", storageError);
+      window.dispatchEvent(new Event("petify-cart-storage-error"));
+    }
+  }, [cart]);
+
+  useEffect(() => {
+    if (loading || error || cart.length === 0) return undefined;
+    let active = true;
+    let removedCount = 0;
+    let updatedCount = 0;
+
+    async function refreshSavedCart() {
+      const productCache = validatedProducts.current;
+      products.forEach((product) => productCache.set(String(product.id), product));
+      const missingIds = [...new Set(cart
+        .map((item) => String(item.productId))
+        .filter((productId) => !productCache.has(productId)))];
+      if (missingIds.length) {
+        try {
+          const fetchedProducts = await getCatalogProductsByIds(missingIds);
+          if (!active) return;
+          fetchedProducts.forEach((product) => productCache.set(String(product.id), product));
+          setValidatedProductIds((currentIds) => [...new Set([
+            ...currentIds,
+            ...fetchedProducts.map((product) => String(product.id)),
+          ])]);
+        } catch (validationError) {
+          if (!active) return;
+          console.error("Could not validate saved cart items against the current catalog.", validationError);
+          setCartValidationError(true);
+          setCartNotice("Cart prices and availability could not be verified. Refresh the catalog before checking out.");
+          return;
+        }
+      }
+      if (!active) return;
+      const refreshedCart = cart.flatMap((item) => {
+        const product = productCache.get(String(item.productId));
+        const variant = product && productOptions(product).find((option) => String(option.id) === String(item.variantId ?? ""));
+        if (!product || !variant) {
+          removedCount += 1;
+          return [];
+        }
+        const refreshedItem = {
+          ...item,
+          key: `${product.id}:${variant.id}`,
+          productId: String(product.id),
+          variantId: String(variant.id ?? ""),
+          title: product.title,
+          image: product.images?.[0] ?? "",
+          variantLabel: variant.label ?? "",
+          price: variant.price,
+        };
+        if (
+          item.price !== refreshedItem.price
+          || item.title !== refreshedItem.title
+          || item.image !== refreshedItem.image
+          || item.variantLabel !== refreshedItem.variantLabel
+        ) updatedCount += 1;
+        return [refreshedItem];
+      });
+      if (removedCount || updatedCount) {
+        setCart(refreshedCart);
+        setCartNotice(removedCount
+          ? `${removedCount} unavailable ${removedCount === 1 ? "item was" : "items were"} removed from your saved cart.`
+          : "Your saved cart was updated with current product prices.");
+      }
+    }
+
+    refreshSavedCart();
+    return () => { active = false; };
+  }, [cart, cartValidationAttempt, error, loading, products]);
+
+  useEffect(() => {
+    if (!detailProductId || loading || error || isAdminRoute || isSalesPortalRoute || isAboutRoute) return undefined;
+    if (products.some((product) => String(product.id) === detailProductId)) return undefined;
+    let active = true;
+    async function loadSharedProduct() {
+      try {
+        const [product] = await getCatalogProductsByIds([detailProductId]);
+        if (!active) return;
+        if (product) {
+          setSharedProduct(product);
+          setProductFetchError(null);
+        } else {
+          setProductFetchError({ id: detailProductId, attempt: productFetchAttempt, message: "This product is no longer available." });
+        }
+      } catch (loadError) {
+        if (!active) return;
+        console.error("Could not load the shared product.", loadError);
+        setProductFetchError({ id: detailProductId, attempt: productFetchAttempt, message: "Product details could not be loaded." });
+      }
+    }
+    loadSharedProduct();
+    return () => { active = false; };
+  }, [detailProductId, error, isAboutRoute, isAdminRoute, isSalesPortalRoute, loading, productFetchAttempt, products]);
 
   useEffect(() => {
     const updateScrollPosition = () => setShowScrollTop(window.scrollY > 320);
@@ -69,7 +240,10 @@ export default function App() {
   }, [isAboutRoute, settings?.brandTitle]);
 
   useEffect(() => {
-    if (settings?.colorPalette) applyColorPalette(settings.colorPalette);
+    if (!settings?.colorPalette) return;
+    applyColorPalette(settings.colorPalette);
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = normalizeColorPalette(settings.colorPalette).colors.background;
   }, [settings?.colorPalette]);
 
   useEffect(() => {
@@ -115,7 +289,8 @@ export default function App() {
   }
 
   const addToCart = useCallback((product, variant) => {
-    const key = `${product.id}:${variant.id}`;
+    if (!variant || variant.price <= 0) return;
+    const key = `${product.id}:${variant.id ?? ""}`;
     setCart((currentCart) => {
       const existingItem = currentCart.find((item) => item.key === key);
       if (existingItem) {
@@ -126,13 +301,17 @@ export default function App() {
 
       return [...currentCart, {
         key,
+        productId: product.id,
+        variantId: variant.id ?? "",
         title: product.title,
         image: product.images?.[0] ?? "",
-        variantLabel: variant.label,
+        variantLabel: variant.label ?? "",
         price: variant.price,
         quantity: 1,
       }];
     });
+    setCartNotice("");
+    setCartValidationError(false);
   }, []);
 
   const updateCartQuantity = useCallback((key, delta) => {
@@ -149,10 +328,48 @@ export default function App() {
 
   const closeCart = useCallback(() => setIsCartOpen(false), []);
   const openCart = useCallback(() => setIsCartOpen(true), []);
+  const retryCatalog = useCallback(() => {
+    validatedProducts.current.clear();
+    setValidatedProductIds([]);
+    setCartValidationError(false);
+    retry();
+  }, [retry]);
+  const openProductDetails = useCallback((product, variantId) => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("product") !== String(product.id)) {
+      url.searchParams.set("product", String(product.id));
+    }
+    if (variantId) url.searchParams.set("variant", String(variantId));
+    else url.searchParams.delete("variant");
+    window.history.pushState({}, "", url);
+    setDetailProductId(String(product.id));
+    setDetailVariantId(variantId ? String(variantId) : null);
+    setProductFetchError(null);
+  }, []);
+  const closeProductDetails = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("product");
+    url.searchParams.delete("variant");
+    window.history.replaceState({}, "", url);
+    setDetailProductId(null);
+    setDetailVariantId(null);
+    setProductFetchError(null);
+  }, []);
 
   const cartItemCount = cart.reduce((count, item) => count + item.quantity, 0);
+  const currentProductIds = new Set(products.map((product) => String(product.id)));
+  const cartValidationPending = !cartValidationError && !loading && !error && cart.some((item) => (
+    !currentProductIds.has(String(item.productId))
+    && !validatedProductIds.includes(String(item.productId))
+  ));
   const showFloatingCart = !loading && !error && settings && !isAboutRoute
-    && cartItemCount > 0 && showScrollTop && !isStoreMenuOpen && !isCartOpen;
+    && showScrollTop && cartItemCount > 0 && !isStoreMenuOpen && !isCartOpen;
+  const detailProduct = products.find((product) => String(product.id) === detailProductId)
+    ?? (String(sharedProduct?.id) === detailProductId ? sharedProduct : null);
+  const detailProductError = productFetchError?.id === detailProductId
+    && productFetchError?.attempt === productFetchAttempt
+    ? productFetchError.message
+    : "";
 
   if (isSalesPortalRoute) return (
     <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading Sales portal...</p></div>}>
@@ -188,16 +405,49 @@ export default function App() {
           onCartClick={openCart}
           onMenuOpenChange={setIsStoreMenuOpen}
           isAboutRoute={isAboutRoute}
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
         />
       )}
       <main className="container" id="top">
         {loading ? <CatalogLoading content={loadingScreen} /> : error ? (
-          <p className="catalog-notice" role="alert">Catalog service is unavailable. Products could not be loaded from Supabase.</p>
+          <div className="catalog-notice" role="alert">
+            <p>Catalog service is unavailable. Products could not be loaded from Supabase.</p>
+            <button type="button" onClick={retryCatalog}>Retry</button>
+          </div>
         ) : (
           isAboutRoute ? (
             <AboutPage content={settings.aboutContent} />
           ) : <>
-            {(settings.visibility.catalog ?? true) && <CatalogSections mainSections={mainSections} sections={sections} products={products} whatsappNumber={settings.contact.whatsappNumber} onAddToCart={addToCart} />}
+            {cartNotice && <p className="store-cart-notice" role="status">{cartNotice}</p>}
+            {(settings.visibility.catalog ?? true) && (
+              <CatalogSections
+                mainSections={mainSections}
+                sections={sections}
+                products={products}
+                whatsappNumber={settings.contact.whatsappNumber}
+                cartItems={cart}
+                searchQuery={searchQuery}
+                hasMoreProducts={products.length < totalProducts}
+                loadingMore={loadingMore}
+                loadMoreError={loadMoreError}
+                onLoadMore={loadMore}
+                onAddToCart={addToCart}
+                onUpdateQuantity={updateCartQuantity}
+                onOpenDetails={openProductDetails}
+              />
+            )}
+            {!loading && detailProductId && !detailProduct && (
+              <div className="catalog-notice" role={detailProductError ? "alert" : "status"}>
+                <p>{detailProductError || "Loading product details…"}</p>
+                {detailProductError && (
+                  <>
+                    <button type="button" onClick={() => setProductFetchAttempt((attempt) => attempt + 1)}>Retry</button>
+                    <button type="button" onClick={closeProductDetails}>Back to the catalog</button>
+                  </>
+                )}
+              </div>
+            )}
             {(settings.visibility.coming_soon ?? true) && (
               <h2 className="section-title glow-text" aria-label={settings.comingSoonTitle}>
                 <span className="status-dot" aria-hidden="true" />
@@ -218,10 +468,23 @@ export default function App() {
         <StoreCart
           items={cart}
           whatsappNumber={settings.contact.whatsappNumber}
+          brandTitle={settings.brandTitle}
+          canCheckout={!cartValidationPending && !cartValidationError}
+          validationMessage={cartValidationPending ? "Checking prices and availability…" : cartValidationError ? "Checkout is paused until current cart prices and availability can be verified." : ""}
+          onRetryValidation={() => setCartValidationAttempt((attempt) => attempt + 1)}
           onClose={closeCart}
           onUpdateQuantity={updateCartQuantity}
           onRemoveItem={removeCartItem}
           onRemoveAllItems={removeAllCartItems}
+        />
+      )}
+      {!loading && !error && settings && detailProduct && (
+        <ProductDetailsDialog
+          product={detailProduct}
+          whatsappNumber={settings.contact.whatsappNumber}
+          onAddToCart={addToCart}
+          onClose={closeProductDetails}
+          initialVariantId={detailVariantId}
         />
       )}
       {showScrollTop && <ScrollToTop onClick={scrollToTop} hasFloatingCart={showFloatingCart} />}

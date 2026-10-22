@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatProductPrice, productOptions } from "../../../lib/productPricing.js";
+import { formatProductPrice, parseProductPrice, productOptions } from "../../../lib/productPricing.js";
 import ProductGallery from "./ProductGallery.jsx";
 import ProductOrderLink from "./ProductOrderLink.jsx";
 
@@ -9,16 +9,34 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
   const combo = product.type === "combo";
   const variants = productOptions(product);
   const [selectedVariantId, setSelectedVariantId] = useState(initialVariantId ?? variants[0]?.id ?? "");
+  const [shareStatus, setShareStatus] = useState("");
   const selectedVariant = variants.find((variant) => variant.id === selectedVariantId) ?? variants[0];
   const isVariantProduct = Boolean(product.variants?.length);
   const displayPrice = isVariantProduct
     ? formatProductPrice(selectedVariant?.price)
-    : product.price;
+    : product.price ? formatProductPrice(parseProductPrice(product.price)) : "";
   const displayOldPrice = isVariantProduct
     ? (selectedVariant?.oldPrice ? formatProductPrice(selectedVariant.oldPrice) : "")
-    : product.oldPrice;
+    : product.oldPrice ? formatProductPrice(parseProductPrice(product.oldPrice)) : "";
+  const currentPrice = isVariantProduct ? selectedVariant?.price : parseProductPrice(product.price);
+  const oldPrice = isVariantProduct ? selectedVariant?.oldPrice : parseProductPrice(product.oldPrice);
+  const discount = currentPrice > 0 && oldPrice > currentPrice ? Math.round((1 - currentPrice / oldPrice) * 100) : 0;
   const canAddToCart = Boolean(selectedVariant && selectedVariant.price > 0);
   const titleId = `product-details-title-${product.id}`;
+
+  async function copyProductLink() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("product", String(product.id));
+    if (selectedVariant?.id) url.searchParams.set("variant", String(selectedVariant.id));
+    else url.searchParams.delete("variant");
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setShareStatus("Product link copied.");
+    } catch (error) {
+      console.error("Could not copy the product link.", error);
+      setShareStatus("Could not copy the link. You can share the URL in your browser address bar.");
+    }
+  }
 
   useEffect(() => {
     const previouslyFocused = document.activeElement;
@@ -72,17 +90,20 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
       >
         <header className="product-details-header">
           <h2 id={titleId}>Product details</h2>
-          <button
-            className="product-details-close"
-            type="button"
-            onClick={onClose}
-            aria-label="Close product details"
-            ref={closeButtonRef}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m6 6 12 12M18 6 6 18" />
-            </svg>
-          </button>
+          <div className="product-details-header-actions">
+            <button className="product-details-share" type="button" onClick={copyProductLink}>Share</button>
+            <button
+              className="product-details-close"
+              type="button"
+              onClick={onClose}
+              aria-label="Close product details"
+              ref={closeButtonRef}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
         </header>
         <div className="product-details-content">
           <div className="product-details-gallery">
@@ -92,6 +113,7 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
             {combo && product.saveTag && <span className="save-tag">{product.saveTag}</span>}
             {product.badge && <span className="card-badge">{product.badge}</span>}
             <h3>{product.title}</h3>
+            {discount > 0 && <span className="product-discount">{discount}% off</span>}
             {product.description && <p>{product.description}</p>}
             {!combo && product.specs?.length > 0 && (
               <ul className="specs">
@@ -119,7 +141,7 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
                       type="radio"
                       name={`variant-${product.id}`}
                       value={variant.id}
-                      checked={variant.id === selectedVariantId}
+                      checked={String(variant.id) === String(selectedVariantId)}
                       onChange={() => setSelectedVariantId(variant.id)}
                       aria-label={`${variant.label}, ${formatProductPrice(variant.price)}`}
                     />
@@ -138,7 +160,7 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
           {!isVariantProduct && (displayPrice || displayOldPrice) && (
             <div className="price-box">
               <span className="price">{displayPrice}</span>
-              {displayOldPrice && <span className="old-price">{displayOldPrice}</span>}
+              {displayOldPrice && <del className="old-price">{displayOldPrice}</del>}
             </div>
           )}
           <div className="card-actions">
@@ -162,6 +184,7 @@ export default function ProductDetailsDialog({ product, whatsappNumber, onAddToC
               variant={isVariantProduct ? selectedVariant : null}
             />
           </div>
+          <p className="product-share-status" role="status" aria-live="polite">{shareStatus}</p>
         </div>
       </section>
     </div>
