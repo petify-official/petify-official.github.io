@@ -113,17 +113,15 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
   });
 
   const activeProducts = useMemo(() => products.filter((product) => product.isActive), [products]);
-
-  useEffect(() => {
-    if (!selectedProductId && activeProducts.length) {
-      setSelectedProductId(activeProducts[0].id);
-      setSelectedVariantId(activeProducts[0].variants?.[0]?.id ?? "");
-    }
-  }, [activeProducts, selectedProductId]);
-
-  const selectedProduct = activeProducts.find((product) => product.id === selectedProductId);
+  const activeSelectedProductId = activeProducts.some((product) => product.id === selectedProductId)
+    ? selectedProductId
+    : activeProducts[0]?.id ?? "";
+  const selectedProduct = activeProducts.find((product) => product.id === activeSelectedProductId);
   const selectedVariants = selectedProduct?.variants ?? [];
-  const selectedOption = selectedVariants.find((variant) => variant.id === selectedVariantId) ?? selectedVariants[0] ?? null;
+  const activeSelectedVariantId = selectedVariants.some((variant) => variant.id === selectedVariantId)
+    ? selectedVariantId
+    : selectedVariants[0]?.id ?? "";
+  const selectedOption = selectedVariants.find((variant) => variant.id === activeSelectedVariantId) ?? null;
   const customers = useMemo(() => {
     const unique = new Map();
     sales.forEach((sale) => {
@@ -178,7 +176,27 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
     }
   }
 
-  useEffect(() => { refreshSales(); }, []);
+  useEffect(() => {
+    let active = true;
+    Promise.all([getSales(), getSalesSettings(), getSalesDashboardMetrics()])
+      .then(([nextSales, nextSettings, nextMetrics]) => {
+        if (!active) return;
+        setSales(nextSales);
+        setSalesSettings(nextSettings);
+        setMetrics(nextMetrics);
+        setPaymentMethod(nextSettings.defaultPaymentMethod);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message || "Sales could not be loaded from Supabase.");
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (!saleFormOpen && !editingSale) return undefined;
@@ -335,10 +353,10 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
   }
 
   function addInvoiceProduct() {
-    const product = activeProducts.find((entry) => entry.id === selectedProductId);
+    const product = activeProducts.find((entry) => entry.id === activeSelectedProductId);
     if (!product) return;
     const variant = product.variants?.length
-      ? product.variants.find((entry) => entry.id === (selectedVariantId || product.variants[0].id))
+      ? product.variants.find((entry) => entry.id === (activeSelectedVariantId || product.variants[0].id))
       : null;
     if (product.variants?.length && !variant) return;
     const variantId = variant?.id ?? "";
@@ -423,10 +441,10 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
   }
 
   function addProduct() {
-    const product = activeProducts.find((entry) => entry.id === selectedProductId);
+    const product = activeProducts.find((entry) => entry.id === activeSelectedProductId);
     if (!product) return;
     const variant = product.variants?.length
-      ? product.variants.find((entry) => entry.id === (selectedVariantId || product.variants[0].id))
+      ? product.variants.find((entry) => entry.id === (activeSelectedVariantId || product.variants[0].id))
       : null;
     if (product.variants?.length && !variant) return;
     const variantId = variant?.id ?? "";
@@ -712,7 +730,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
 
           <div className="sales-product-row">
             <label>Search catalog product
-              <select value={selectedProductId} onChange={(event) => {
+              <select value={activeSelectedProductId} onChange={(event) => {
                 const productId = event.target.value;
                 setSelectedProductId(productId);
                 setSelectedVariantId(activeProducts.find((product) => product.id === productId)?.variants?.[0]?.id ?? "");
@@ -739,7 +757,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
                 </select>
               </label>
             )}
-            <button type="button" className="admin-primary-button" onClick={addProduct} disabled={!selectedProductId || (selectedVariants.length > 0 && !selectedOption)}>Add product</button>
+            <button type="button" className="admin-primary-button" onClick={addProduct} disabled={!activeSelectedProductId || (selectedVariants.length > 0 && !selectedOption)}>Add product</button>
           </div>
 
           {items.length ? (
@@ -949,7 +967,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
               )}
               <div className="sales-product-row">
                 <label>Add catalog product
-                  <select value={selectedProductId} onChange={(event) => {
+                  <select value={activeSelectedProductId} onChange={(event) => {
                     const productId = event.target.value;
                     setSelectedProductId(productId);
                     setSelectedVariantId(activeProducts.find((product) => product.id === productId)?.variants?.[0]?.id ?? "");
@@ -965,7 +983,7 @@ export default function SalesDashboard({ products, userId, isAdmin }) {
                     </select>
                   </label>
                 )}
-                <button type="button" className="admin-primary-button" onClick={addInvoiceProduct} disabled={!selectedProductId || (selectedVariants.length > 0 && !selectedOption)}>Add product</button>
+                <button type="button" className="admin-primary-button" onClick={addInvoiceProduct} disabled={!activeSelectedProductId || (selectedVariants.length > 0 && !selectedOption)}>Add product</button>
               </div>
               {invoiceItems.length ? (
                 <div className="sales-line-items">

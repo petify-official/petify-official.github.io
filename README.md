@@ -8,7 +8,7 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 2. Run `npm install`.
 3. Run `npm run dev` and open the URL Vite prints.
 
-## Connect Supabase and enable admin product management
+## Connect Supabase and enable workspace access
 
 1. Create a Supabase project.
 2. Run the numbered SQL modules in `supabase/` in order:
@@ -18,24 +18,33 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
    4. `sales-04.sql` enables the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. It depends on the admin and catalog modules.
    5. `admin-sales-editing-05.sql` applies the Sales editing permissions and manual-sale functions. It depends on the Sales module.
    6. `inventory-dashboard-06.sql` adds admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales.
-   7. `product-seed-07.sql` inserts or updates the current product details. Seeded products start without photos; upload their photos from the admin page.
+   7. `admin-access-07.sql` unifies Sales authorization, creates the access-request workflow, and adds admin approval/revocation RPCs. Apply it after `inventory-dashboard-06.sql`.
+   8. `product-seed-07.sql` inserts or updates the current product details. Seeded products start without photos; upload their photos from the admin page.
 
-   The numbers indicate dependency order. These scripts create or update schema; they do not drop tables or erase existing data. Rerun them in order when applying schema updates. The catalog module is safe to rerun, including its later additions to store settings.
-3. In Supabase Authentication, create your account. Do not enable public sign-ups.
-4. In Authentication → Users, copy your account's UUID. In the SQL Editor, assign that account admin access:
+   `admin-access-07.sql` intentionally shares the `07` suffix with the existing seed file; apply the access migration before seeding products. These scripts create or update schema and preserve existing `admin_users` and `sales_users` rows. Rerun schema modules in dependency order when applying updates.
+3. In Supabase Authentication, enable email/password sign-in and email confirmation. Enable sign-ups so staff can request accounts; unapproved accounts cannot access the workspace, and RLS remains the security boundary.
+4. Create the first admin once, using the account's email, in the Supabase SQL Editor. This is a privileged bootstrap operation and must not be exposed as a client RPC:
 
    ```sql
    insert into public.admin_users (user_id)
-   values ('YOUR_AUTH_USER_UUID');
+   select id
+   from auth.users
+   where lower(email) = lower('owner@example.com')
+   on conflict (user_id) do nothing;
    ```
 
-5. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
-6. Visit `/#admin`, sign in with the account you created, and manage products. Create, rename, reorder, or delete main sections and subsections from the Products page, and optionally group subsections under a main section. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
-7. Open `/#petify-dashboard` to use the Sales board (or `/petify-dashboard` on hosts configured with SPA path fallback). Admins and assigned Sales users can sign in; administrators can also open it from the admin navigation. Configure Sales access and invoice settings under **Admin → Site settings → Sales settings**.
-8. To add multi-size or multi-quantity products, edit a product, enable **This product has purchasable varieties with different prices**, then add an option label and its price for each size/pack (for example, `250 g`, `500 g`, and `1 kg`). Prices can be entered with or without thousands separators (for example, `1,299`); they are stored as numbers and displayed with Indian currency formatting. Each option gets its own formatted price on the storefront and is included in WhatsApp order messages and Sales invoices.
-9. Admin and Sales sessions automatically sign out after 10 hours from sign-in. For server-enforced session expiration (including API access outside this UI), set the Supabase Auth session time-box to 10 hours in the project's Auth settings. The app also enforces the 10-hour limit in open and reopened dashboard tabs.
+   Run this once for the initial owner only. There is no public/admin-client bootstrap RPC. Add later admins through **Site settings → Team & Access**.
+5. Configure Supabase Auth settings before launch:
+   - Require email confirmation and choose the password minimum in Supabase Auth to match your preference. The app does not impose an additional password length rule.
+   - Keep **Confirm email** enabled. Add the production site URL and `http://localhost:5173` to **Authentication → URL Configuration → Redirect URLs**, including the reset destination `https://your-production-host/?view=reset-password` and `http://localhost:5173/?view=reset-password`. Keep the site URL set to the canonical production origin.
+   - Keep built-in email/password rate limits enabled, configure CAPTCHA for sign-up and password-reset endpoints, and set appropriate email delivery limits for the project.
+   - Set the Auth session time-box to 10 hours. The app also enforces a 10-hour limit in open and reopened workspace tabs.
+6. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the project's API settings. Restart Vite.
+7. Visit `/#admin`, sign in with the bootstrap owner account, and manage products. Create, rename, reorder, or delete main sections and subsections from the Products page, and optionally group subsections under a main section. Manage hero pill text and destinations, and upload or replace the store logo there too. New photos and the logo upload to the `product-images` Storage bucket.
+8. Open `/#petify-dashboard` to use Sales (or `/petify-dashboard` on hosts configured with SPA path fallback). Admins automatically have Sales access; Sales-only access is approved by email under **Site settings → Team & Access**.
+9. To add multi-size or multi-quantity products, edit a product, enable **This product has purchasable varieties with different prices**, then add an option label and its price for each size/pack (for example, `250 g`, `500 g`, and `1 kg`). Prices can be entered with or without thousands separators (for example, `1,299`); they are stored as numbers and displayed with Indian currency formatting.
 
-Only the public anon key belongs in this frontend. Never put a service-role key in a `VITE_` variable. Visitors can read active products; catalog writes require the assigned admin role. Sales access requires either the admin role or an explicitly assigned Sales role.
+Only the public anon key belongs in this frontend. Never put a service-role key in a `VITE_` variable. Visitors can read active products; catalog writes and access management require admin checks in RLS/RPCs. Sales access uses the unified admin-or-Sales predicate. A new account's sign-up only creates a pending request; an admin must approve it before workspace data becomes available.
 
 The storefront has a client-side cart for combining priced products and variants into one WhatsApp order request; each product can still be ordered directly from its card. Cart contents last only for the current page session and are not saved as a data source. There is no checkout/order database or storefront inventory/stock tracking; availability, shipping, and payment are confirmed by the team over WhatsApp. Edit the About page's introduction, mission, vision, and team description in **Admin → Site settings → Store content → About page**.
 
@@ -98,7 +107,7 @@ async function removeItem() {
 />
 ```
 
-`useWorkspaceSession()` shares Supabase session restoration and expiration handling; role authorization remains explicit at each entry point and protected data remains enforced by RLS.
+`WorkspaceAccessProvider` shares one Supabase session and the cached `get_my_access()` result across Admin and Sales entry points; protected data remains enforced by RLS.
 
 ## Build
 

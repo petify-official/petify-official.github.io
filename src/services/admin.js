@@ -78,7 +78,7 @@ export async function getStoreFavicon() {
 export async function getAppearanceSettings() {
   const { data, error } = await supabase
     .from("site_settings")
-    .select("color_palette, loading_screen")
+    .select("color_palette, loading_screen, admin_brand")
     .eq("id", "storefront")
     .maybeSingle();
   if (error) throw error;

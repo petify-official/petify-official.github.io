@@ -1,34 +1,45 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { DEFAULT_ADMIN_BRAND, normalizeAdminBrand } from "../../config/siteAppearance.js";
 import { supabase } from "../../lib/supabase.js";
-import useRoleAccess from "../../hooks/useRoleAccess.js";
+import useWorkspaceAccess from "../../hooks/useWorkspaceAccess.js";
 import AdminLogin from "../admin/auth/AdminLogin.jsx";
 import WorkspaceSidebar from "../admin/WorkspaceSidebar.jsx";
 import { createSalesNavigationItem } from "../admin/workspaceNavigation.js";
 import AccountMenu from "../admin/AccountMenu.jsx";
 import SalesDashboard from "./SalesDashboard.jsx";
-import { clearSessionLifetime } from "../../hooks/sessionLifetime.js";
-import useWorkspaceSession from "../../hooks/useWorkspaceSession.js";
 import AdminButton from "../admin/components/AdminButton.jsx";
 import AdminNotice from "../admin/components/AdminNotice.jsx";
 import AdminTopbar from "../admin/components/AdminTopbar.jsx";
 import AdminBottomNav from "../admin/components/AdminBottomNav.jsx";
-
-const salesRoleTables = [
-  { name: "admin", table: "admin_users" },
-  { name: "sales", table: "sales_users", impliedBy: "admin" },
-];
+import WorkspaceAccessStatus from "../admin/auth/WorkspaceAccessStatus.jsx";
+import { requestAccess } from "../../services/access.js";
 
 export default function SalesPortal({ products, adminBrand: initialAdminBrand }) {
-  const { session, setSession, checkingSession, error } = useWorkspaceSession();
+  const {
+    session,
+    setSession,
+    checkingSession,
+    sessionError: error,
+    access,
+    accessLoading: checkingAccess,
+    accessError,
+    refreshAccess,
+    signOut,
+  } = useWorkspaceAccess();
+  const [signOutError, setSignOutError] = useState("");
   const adminBrand = normalizeAdminBrand(initialAdminBrand ?? DEFAULT_ADMIN_BRAND);
-  const { roles, loading: checkingAccess, error: accessError } = useRoleAccess(session, salesRoleTables);
-  const isAdmin = Boolean(roles.admin);
-  const hasSalesAccess = isAdmin || Boolean(roles.sales);
-  async function signOut() {
-    clearSessionLifetime(session);
-    await supabase.auth.signOut();
+  const isAdmin = Boolean(access?.is_admin);
+  const hasSalesAccess = Boolean(access?.has_sales_access);
+
+  async function handleSignOut() {
+    setSignOutError("");
+    try {
+      await signOut();
+    } catch (signOutFailure) {
+      setSignOutError(signOutFailure.message || "Sign out could not be completed.");
+    }
   }
+
   useEffect(() => {
     if (!hasSalesAccess) return undefined;
     let frame;
@@ -68,7 +79,7 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
           adminBrand={adminBrand}
           onSignedIn={setSession}
           title="Sales portal sign in"
-          description="Sign in with your Supabase Auth account. Admins and users assigned Sales access can continue."
+          description="Sign in with your account. Admins automatically have Sales access; approved Sales users can also continue."
           backHref="/"
         />
       </div>
@@ -83,9 +94,10 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
           <h1>Sales access could not be verified</h1>
           <AdminNotice kind="error">{error || accessError}</AdminNotice>
           <p className="admin-gate-actions">
-            <AdminButton onClick={() => window.location.reload()}>Try again</AdminButton>
-            <AdminButton onClick={() => supabase.auth.signOut()}>Sign out</AdminButton>
+            <AdminButton onClick={() => refreshAccess({ force: true })}>Try again</AdminButton>
+            <AdminButton onClick={handleSignOut}>Sign out</AdminButton>
           </p>
+          {signOutError && <AdminNotice kind="error">{signOutError}</AdminNotice>}
         </div>
       </div>
     );
@@ -93,26 +105,21 @@ export default function SalesPortal({ products, adminBrand: initialAdminBrand })
 
   if (!hasSalesAccess) {
     return (
-      <div className="admin-gate">
-        <div>
-          <p className="admin-eyebrow">SALES ACCESS REQUIRED</p>
-          <h1>This account is not assigned to Sales</h1>
-          <p>Ask an administrator to grant Sales access from Site settings. This account cannot access products or other admin settings.</p>
-          <code className="admin-user-id">{session.user.id}</code>
-          {error && <AdminNotice kind="error">{error}</AdminNotice>}
-          <p className="admin-gate-actions">
-            <AdminButton onClick={() => window.location.reload()}>Check access again</AdminButton>
-            <AdminButton onClick={() => supabase.auth.signOut()}>Sign out</AdminButton>
-          </p>
-        </div>
-      </div>
+      <WorkspaceAccessStatus
+        status={access?.status ?? "none"}
+        error={error || accessError}
+        onRequest={requestAccess}
+        onRefresh={() => refreshAccess({ force: true })}
+        onSignOut={signOut}
+      />
     );
   }
 
   return (
     <div className="admin-shell sales-portal-shell">
+      {signOutError && <AdminNotice kind="error">{signOutError}</AdminNotice>}
       <AdminTopbar brand={{ ...adminBrand, label: "Sales" }} pageTitle="Sales dashboard">
-        <AccountMenu email={session.user.email} onSignOut={signOut} />
+        <AccountMenu email={session.user.email} onSignOut={handleSignOut} />
       </AdminTopbar>
       <main className="admin-content">
         <WorkspaceSidebar heading="SALES" items={[

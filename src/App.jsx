@@ -12,6 +12,7 @@ import ProductDetailsDialog from "./features/storefront/components/ProductDetail
 import { getCatalogProductsByIds } from "./services/catalog.js";
 import useStorefrontCatalog from "./features/storefront/useStorefrontCatalog.js";
 import { productOptions } from "./lib/productPricing.js";
+import { WorkspaceAccessProvider } from "./hooks/WorkspaceAccessProvider.jsx";
 import {
   DEFAULT_LOADING_SCREEN,
   applyColorPalette,
@@ -21,7 +22,9 @@ import {
 
 const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
+const PasswordReset = lazy(() => import("./features/admin/auth/PasswordReset.jsx"));
 const CART_STORAGE_KEY = "petify-store-cart";
+const DEFAULT_DOCUMENT_TITLE = "Pëtify | Pure love, premium care";
 
 function readStoredCart() {
   try {
@@ -67,6 +70,9 @@ export default function App() {
   const isAboutRoute = routeHash === "#about";
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
+  const isPasswordResetRoute = new URLSearchParams(window.location.search).get("view") === "reset-password"
+    || routeHash === "#reset-password"
+    || new URLSearchParams(routeHash.slice(1)).get("type") === "recovery";
   const [showScrollTop, setShowScrollTop] = useState(window.scrollY > 320);
   const [storedCart] = useState(readStoredCart);
   const [cart, setCart] = useState(storedCart.items);
@@ -234,9 +240,8 @@ export default function App() {
   }, [isAboutRoute, routeHash, products, sections]);
 
   useEffect(() => {
-    if (settings?.brandTitle) {
-      document.title = isAboutRoute ? `About us | ${settings.brandTitle}` : settings.brandTitle;
-    }
+    const storeTitle = settings?.brandTitle?.trim() || DEFAULT_DOCUMENT_TITLE;
+    document.title = isAboutRoute ? `About us | ${storeTitle}` : storeTitle;
   }, [isAboutRoute, settings?.brandTitle]);
 
   useEffect(() => {
@@ -371,23 +376,33 @@ export default function App() {
     ? productFetchError.message
     : "";
 
-  if (isSalesPortalRoute) return (
-    <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading Sales portal...</p></div>}>
-      <SalesPortal products={products} adminBrand={settings?.adminBrand} />
+  if (isPasswordResetRoute) return (
+    <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading password reset...</p></div>}>
+      <PasswordReset />
     </Suspense>
   );
 
+  if (isSalesPortalRoute) return (
+    <WorkspaceAccessProvider>
+      <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading Sales portal...</p></div>}>
+        <SalesPortal products={products} adminBrand={settings?.adminBrand} />
+      </Suspense>
+    </WorkspaceAccessProvider>
+  );
+
   if (isAdminRoute) return (
-    <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading admin...</p></div>}>
-      <AdminDashboard
-        adminBrand={settings?.adminBrand}
-        initialView={
-          routeHash === "#admin-settings"
-            ? "site-settings"
-            : routeHash === "#admin-products" ? "products" : undefined
-        }
-      />
-    </Suspense>
+    <WorkspaceAccessProvider>
+      <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading admin...</p></div>}>
+        <AdminDashboard
+          adminBrand={settings?.adminBrand}
+          initialView={
+            routeHash === "#admin-settings"
+              ? "site-settings"
+              : routeHash === "#admin-products" ? "products" : undefined
+          }
+        />
+      </Suspense>
+    </WorkspaceAccessProvider>
   );
 
   return (

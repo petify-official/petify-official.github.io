@@ -65,32 +65,6 @@ export async function saveSalesSettings(settings) {
   if (error) throw error;
 }
 
-export async function getSalesUsers() {
-  const client = requireSupabase();
-  const { data, error } = await client
-    .from("sales_users")
-    .select("user_id, created_at")
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return data;
-}
-
-export async function addSalesUser(userId) {
-  const client = requireSupabase();
-  const normalizedId = userId.trim();
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedId)) {
-    throw new Error("Enter a valid Supabase Auth user UUID.");
-  }
-  const { error } = await client.from("sales_users").insert({ user_id: normalizedId });
-  if (error) throw error;
-}
-
-export async function removeSalesUser(userId) {
-  const client = requireSupabase();
-  const { error } = await client.from("sales_users").delete().eq("user_id", userId);
-  if (error) throw error;
-}
-
 export async function getSales() {
   const client = requireSupabase();
   const { data, error } = await client

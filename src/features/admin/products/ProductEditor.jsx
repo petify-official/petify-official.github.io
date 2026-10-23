@@ -19,33 +19,21 @@ function isDefaultOrderMessage(message, title) {
   return title.startsWith(message.slice(defaultOrderMessagePrefix.length));
 }
 
-function addImageFiles(files) {
-  const selected = files.map((file) => {
-    const previewUrl = URL.createObjectURL(file);
-    previewUrls.current.add(previewUrl);
-    return { id: crypto.randomUUID(), file, previewUrl };
-  });
-  setImageItems((current) => [...current, ...selected]);
-}
-
 export default function ProductEditor({ product, draft, products, mainSections, sections, userId, onCancel, onDraftChange, onDraftSaved, onSave }) {
   const [isEditing, setIsEditing] = useState(() => draft?.isEditing ?? Boolean(product.id));
-  const initialProductState = useRef(null);
-  if (!initialProductState.current) {
-    initialProductState.current = {
-      form: {
-        ...product,
-        variants: product.variants ?? [],
-        variantsEnabled: Boolean(product.variants?.length),
-      },
-      images: product.images ?? [],
-    };
-  }
-  const { form: initialForm, images: initialImages } = initialProductState.current;
-  const resetFormRef = useRef(initialForm);
-  const resetImagesRef = useRef(initialImages);
-  const startingFormRef = useRef({ ...initialForm, ...(draft?.form ?? {}) });
-  const startingImagesRef = useRef(draft?.images ?? initialImages);
+  const [initialProductState] = useState(() => ({
+    form: {
+      ...product,
+      variants: product.variants ?? [],
+      variantsEnabled: Boolean(product.variants?.length),
+    },
+    images: product.images ?? [],
+  }));
+  const { form: initialForm, images: initialImages } = initialProductState;
+  const [resetForm, setResetForm] = useState(initialForm);
+  const [resetImages, setResetImages] = useState(initialImages);
+  const [startingForm, setStartingForm] = useState(() => ({ ...initialForm, ...(draft?.form ?? {}) }));
+  const [startingImages, setStartingImages] = useState(draft?.images ?? initialImages);
   const savedDraftAtOpenRef = useRef(Boolean(draft?.isSavedDraft));
   const [form, setForm] = useState(() => ({
     ...initialForm,
@@ -61,17 +49,25 @@ export default function ProductEditor({ product, draft, products, mainSections, 
   const [uploadProgress, setUploadProgress] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const addImageFiles = useCallback((files) => {
+    const selected = files.map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      previewUrls.current.add(previewUrl);
+      return { id: crypto.randomUUID(), file, previewUrl };
+    });
+    setImageItems((current) => [...current, ...selected]);
+  }, []);
   const { confirm, dialogProps } = useConfirmDialog();
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const cancelHandlerRef = useRef(null);
   const currentImageUrls = imageItems.filter((item) => item.url).map((item) => item.url);
-  const isDirty = JSON.stringify(form) !== JSON.stringify(startingFormRef.current)
-    || JSON.stringify(currentImageUrls) !== JSON.stringify(startingImagesRef.current)
+  const isDirty = JSON.stringify(form) !== JSON.stringify(startingForm)
+    || JSON.stringify(currentImageUrls) !== JSON.stringify(startingImages)
     || imageItems.some((item) => item.file)
     || recoveredPhotoCount > 0;
-  const hasData = JSON.stringify(form) !== JSON.stringify(resetFormRef.current)
-    || JSON.stringify(currentImageUrls) !== JSON.stringify(resetImagesRef.current)
+  const hasData = JSON.stringify(form) !== JSON.stringify(resetForm)
+    || JSON.stringify(currentImageUrls) !== JSON.stringify(resetImages)
     || imageItems.some((item) => item.file)
     || recoveredPhotoCount > 0;
   const cloudDraftKey = draft?.key ?? product.id ?? "new-product";
@@ -83,18 +79,18 @@ export default function ProductEditor({ product, draft, products, mainSections, 
     savedDraftAtOpenRef.current = true;
     if (savedDraft?.form) {
       const restoredForm = { ...initialForm, ...savedDraft.form };
-      startingFormRef.current = restoredForm;
+      setStartingForm(restoredForm);
       setForm((current) => ({ ...current, ...savedDraft.form }));
     }
     if (Array.isArray(savedDraft?.images)) {
-      startingImagesRef.current = savedDraft.images;
+      setStartingImages(savedDraft.images);
       setImageItems(savedDraft.images.map((url, index) => ({ id: `cloud-${index}`, url })));
     }
   }, [initialForm]);
   const shouldSaveProductDraft = useCallback((value) => (
     isEditing
-      ? JSON.stringify(value.form) !== JSON.stringify(resetFormRef.current)
-        || JSON.stringify(value.images) !== JSON.stringify(resetImagesRef.current)
+      ? JSON.stringify(value.form) !== JSON.stringify(resetForm)
+        || JSON.stringify(value.images) !== JSON.stringify(resetImages)
       : Boolean(
       value.form.title?.trim()
       || value.form.description?.trim()
@@ -110,7 +106,7 @@ export default function ProductEditor({ product, draft, products, mainSections, 
       || value.images.length
       || !value.form.isActive
       )
-  ), [isEditing]);
+  ), [isEditing, resetForm, resetImages]);
   const productDraft = useWorkspaceDraft({
     userId,
     draftType: "product",
@@ -321,10 +317,10 @@ export default function ProductEditor({ product, draft, products, mainSections, 
           stockQuantity: isEditing ? Number(product.stockQuantity ?? 0) : 0,
         };
         setIsEditing(true);
-        resetFormRef.current = persistedForm;
-        resetImagesRef.current = images;
-        startingFormRef.current = persistedForm;
-        startingImagesRef.current = images;
+        setResetForm(persistedForm);
+        setResetImages(images);
+        setStartingForm(persistedForm);
+        setStartingImages(images);
         savedDraftAtOpenRef.current = false;
         await onSave({ closeEditor: false });
         setUploadProgress(null);
@@ -393,8 +389,8 @@ export default function ProductEditor({ product, draft, products, mainSections, 
         await productDraft.clear();
         if (savedDraftAtOpenRef.current) {
           await productDraft.saveNow({
-            form: startingFormRef.current,
-            images: startingImagesRef.current,
+            form: startingForm,
+            images: startingImages,
           });
         }
         await onDraftSaved?.();
@@ -405,7 +401,9 @@ export default function ProductEditor({ product, draft, products, mainSections, 
     }
     onCancel();
   }
-  cancelHandlerRef.current = requestCancel;
+  useEffect(() => {
+    cancelHandlerRef.current = requestCancel;
+  });
 
   async function clearAllData() {
     if (hasData && !await confirm({
@@ -419,10 +417,10 @@ export default function ProductEditor({ product, draft, products, mainSections, 
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       });
       previewUrls.current.clear();
-      setForm(resetFormRef.current);
-      setImageItems(resetImagesRef.current.map((url, index) => ({ id: `existing-${index}`, url })));
-      startingFormRef.current = resetFormRef.current;
-      startingImagesRef.current = resetImagesRef.current;
+      setForm(resetForm);
+      setImageItems(resetImages.map((url, index) => ({ id: `existing-${index}`, url })));
+      setStartingForm(resetForm);
+      setStartingImages(resetImages);
       savedDraftAtOpenRef.current = false;
       setRecoveredPhotoCount(0);
       setProductIdCustomized(false);

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useEffect } from "react";
 import AdminButton from "../components/AdminButton.jsx";
 
 export default function ProductListItem({
@@ -18,9 +17,6 @@ export default function ProductListItem({
   const [price, setPrice] = useState(product.price ?? "");
   const [stock, setStock] = useState(String(product.stockQuantity ?? 0));
   const productLabel = product.title?.trim() || "Untitled product";
-
-  useEffect(() => setPrice(product.price ?? ""), [product.price]);
-  useEffect(() => setStock(String(product.stockQuantity ?? 0)), [product.stockQuantity]);
 
   async function submitPrice(event) {
     event.preventDefault();
@@ -64,11 +60,17 @@ export default function ProductListItem({
           <summary aria-label={`More actions for ${productLabel}`}>More</summary>
           <div>
             {!product.variants?.length && (
-              <AdminButton onClick={() => setEditingPrice((current) => !current)}>
+              <AdminButton onClick={() => {
+                setPrice(product.price ?? "");
+                setEditingPrice((current) => !current);
+              }}>
                 {editingPrice ? "Cancel price edit" : "Quick edit price"}
               </AdminButton>
             )}
-            <AdminButton onClick={() => setEditingStock((current) => !current)}>
+            <AdminButton onClick={() => {
+              setStock(String(product.stockQuantity ?? 0));
+              setEditingStock((current) => !current);
+            }}>
               {editingStock ? "Cancel stock edit" : "Quick edit stock"}
             </AdminButton>
             <AdminButton variant="danger" disabled={deleting} onClick={onDelete}>Delete product</AdminButton>

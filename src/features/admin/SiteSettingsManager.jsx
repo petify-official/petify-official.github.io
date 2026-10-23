@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import StorefrontContentEditor from "./StorefrontContentEditor.jsx";
 import AppearanceSettingsEditor from "./AppearanceSettingsEditor.jsx";
 import SalesSettings from "../sales/SalesSettings.jsx";
@@ -20,6 +20,8 @@ import AdminButton from "./components/AdminButton.jsx";
 import AdminNotice from "./components/AdminNotice.jsx";
 import AdminState from "./components/AdminState.jsx";
 import useObjectUrl from "../../hooks/useObjectUrl.js";
+
+const TeamAccessPanel = lazy(() => import("./TeamAccessPanel.jsx"));
 
 export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, mainSections, sections, products }) {
   const [storeLogo, setStoreLogo] = useState("");
@@ -323,6 +325,14 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
         <summary>General and Sales</summary>
         <div className="admin-settings-group-content">
           <SalesSettings userId={userId} />
+        </div>
+      </details>
+      <details className="admin-settings-group">
+        <summary>Team &amp; Access</summary>
+        <div className="admin-settings-group-content">
+          <Suspense fallback={<AdminState kind="loading" description="Loading access controls..." />}>
+            <TeamAccessPanel />
+          </Suspense>
         </div>
       </details>
     </div>

@@ -1,11 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "../../lib/supabase.js";
-import { formatProductPrice } from "../../lib/productPricing.js";
 import WorkspaceSidebar from "./WorkspaceSidebar.jsx";
 import { createAdminNavigationItems } from "./adminNavigation.js";
 import AccountMenu from "./AccountMenu.jsx";
 import { deleteWorkspaceDraft, getWorkspaceDrafts } from "../../services/workspaceDrafts.js";
-import { clearSessionLifetime } from "../../hooks/sessionLifetime.js";
+import useWorkspaceAccess from "../../hooks/useWorkspaceAccess.js";
 import useConfirmDialog from "../../hooks/useConfirmDialog.js";
 import useScrollAwareVisibility from "../../hooks/useScrollAwareVisibility.js";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
@@ -54,6 +52,7 @@ const SiteSettingsManager = lazy(loadSiteSettingsManager);
 const ProductEditor = lazy(() => import("./products/ProductEditor.jsx"));
 
 export default function ProductManager({ session, adminBrand, onAdminBrandChange, initialView }) {
+  const { signOut } = useWorkspaceAccess();
   const [products, setProducts] = useState([]);
   const [sections, setSections] = useState([]);
   const [mainSections, setMainSections] = useState([]);
@@ -65,8 +64,10 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
       activeView: initialView ?? (savedWorkspace.activeView === "site-settings" ? "site-settings" : "products"),
     };
   });
-  const [persistenceError, setPersistenceError] = useState("");
-  const activeView = workspace.activeView === "site-settings" ? "site-settings" : "products";
+  const [persistenceIssue, setPersistenceIssue] = useState(null);
+  const activeView = initialView ?? (workspace.activeView === "site-settings" ? "site-settings" : "products");
+  const workspaceSnapshot = JSON.stringify({ ...workspace, activeView });
+  const persistenceError = persistenceIssue?.snapshot === workspaceSnapshot ? persistenceIssue.message : "";
   const [settingsVisited, setSettingsVisited] = useState(activeView === "site-settings");
   const editorDraft = workspace.editorDraft ?? null;
   const editorProduct = editorDraft?.product ?? null;
@@ -122,34 +123,30 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   }, [products, productSearch, productSectionFilter, productSort, productStatusFilter]);
 
   useEffect(() => {
-    if (initialView) {
-      if (initialView === "site-settings") setSettingsVisited(true);
-      setWorkspace((current) => ({ ...current, activeView: initialView }));
-    }
-  }, [initialView]);
-
-  useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeView]);
 
   useEffect(() => {
-    const prefetchTimer = window.setTimeout(() => {
-      loadSiteSettingsManager().catch((loadError) => {
-        console.error("Site settings could not be preloaded.", loadError);
-      });
-    }, 0);
-    return () => window.clearTimeout(prefetchTimer);
+    function handlePersistenceError(event) {
+      setPersistenceIssue(event.detail);
+    }
+    window.addEventListener("petify-workspace-persistence-error", handlePersistenceError);
+    return () => window.removeEventListener("petify-workspace-persistence-error", handlePersistenceError);
   }, []);
 
   useEffect(() => {
     try {
-      sessionStorage.setItem(`petify-admin-workspace:${session.user.id}`, JSON.stringify(workspace));
-      setPersistenceError("");
+      sessionStorage.setItem(`petify-admin-workspace:${session.user.id}`, workspaceSnapshot);
     } catch (storageError) {
       console.error("The admin workspace could not be saved for recovery.", storageError);
-      setPersistenceError("This browser could not save your admin workspace for recovery. Keep this page open to avoid losing unsaved changes.");
+      window.dispatchEvent(new CustomEvent("petify-workspace-persistence-error", {
+        detail: {
+          snapshot: workspaceSnapshot,
+          message: "This browser could not save your admin workspace for recovery. Keep this page open to avoid losing unsaved changes.",
+        },
+      }));
     }
-  }, [session.user.id, workspace]);
+  }, [session.user.id, workspaceSnapshot]);
 
   const saveEditorDraft = useCallback((draft) => {
     setWorkspace((current) => ({
@@ -185,8 +182,30 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     }
   }
 
-  useEffect(() => { refreshProducts(); }, []);
-  useEffect(() => { refreshProductDrafts(); }, [session.user.id]);
+  useEffect(() => {
+    let active = true;
+    Promise.all([getAdminProducts(), getAdminSections(), getAdminMainSections()])
+      .then(([nextProducts, nextSections, nextMainSections]) => {
+        if (!active) return;
+        setProducts(nextProducts);
+        setSections(nextSections);
+        setMainSections(nextMainSections);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError.message || "Products could not be loaded.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    getWorkspaceDrafts(session.user.id, "product")
+      .then((drafts) => { if (active) setProductDrafts(drafts); })
+      .catch((draftError) => { if (active) setError(draftError.message || "Saved product drafts could not be loaded."); });
+    return () => { active = false; };
+  }, [session.user.id]);
 
   function resumeProductDraft(savedDraft) {
     const savedForm = savedDraft.payload?.form ?? {};
@@ -513,11 +532,6 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     void removeProduct(product);
   }
 
-  async function signOut() {
-    clearSessionLifetime(session);
-    await supabase.auth.signOut();
-  }
-
   function selectWorkspaceView(view) {
     if (view === "site-settings") setSettingsVisited(true);
     setWorkspace((current) => ({ ...current, activeView: view }));
@@ -543,7 +557,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
             </AdminNotice>
           )}
           <div hidden={activeView !== "site-settings"}>
-            {settingsVisited && (
+            {(settingsVisited || activeView === "site-settings") && (
               <>
                 <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
                 <Suspense fallback={<p className="admin-muted">Loading site settings...</p>}>

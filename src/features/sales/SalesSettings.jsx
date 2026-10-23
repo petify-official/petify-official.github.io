@@ -1,18 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  addSalesUser,
   getSalesSettings,
-  getSalesUsers,
-  removeSalesUser,
   saveSalesSettings,
 } from "../../services/sales.js";
 import useWorkspaceDraft from "../../hooks/useWorkspaceDraft.js";
 import WorkspaceDraftControls from "../admin/WorkspaceDraftControls.jsx";
-import useConfirmDialog from "../../hooks/useConfirmDialog.js";
-import ConfirmDialog from "../admin/components/ConfirmDialog.jsx";
 import AdminNotice from "../admin/components/AdminNotice.jsx";
 import AdminState from "../admin/components/AdminState.jsx";
-import AdminButton from "../admin/components/AdminButton.jsx";
 
 const methods = [
   ["cash", "Cash"],
@@ -33,10 +27,6 @@ export default function SalesSettings({ userId }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [salesUsers, setSalesUsers] = useState([]);
-  const [newSalesUserId, setNewSalesUserId] = useState("");
-  const [savingSalesUser, setSavingSalesUser] = useState(false);
-  const { confirm, dialogProps } = useConfirmDialog();
   const restoreSalesSettingsDraft = useCallback((draft) => setSettings((current) => ({
     ...current,
     ...draft,
@@ -53,50 +43,15 @@ export default function SalesSettings({ userId }) {
 
   useEffect(() => {
     let active = true;
-    Promise.all([getSalesSettings(), getSalesUsers()])
-      .then(([nextSettings, nextSalesUsers]) => {
+    getSalesSettings()
+      .then((nextSettings) => {
         if (!active) return;
         setSettings(nextSettings);
-        setSalesUsers(nextSalesUsers);
       })
       .catch((loadError) => { if (active) setError(loadError.message || "Sales settings could not be loaded."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-
-  async function addSalesAccount(event) {
-    event.preventDefault();
-    setSavingSalesUser(true);
-    setError("");
-    setNotice("");
-    try {
-      await addSalesUser(newSalesUserId);
-      setSalesUsers(await getSalesUsers());
-      setNewSalesUserId("");
-      setNotice("Sales access granted. The account can sign in at /#petify-dashboard.");
-    } catch (saveError) {
-      setError(saveError.message || "Sales access could not be granted.");
-    } finally {
-      setSavingSalesUser(false);
-    }
-  }
-
-  async function revokeSalesAccount(userId) {
-    if (!await confirm({
-      title: "Remove this account's Sales portal access?",
-      description: "This account will no longer be able to access the Sales workspace.",
-      confirmLabel: "Remove access",
-    })) return;
-    setError("");
-    setNotice("");
-    try {
-      await removeSalesUser(userId);
-      setSalesUsers((current) => current.filter((user) => user.user_id !== userId));
-      setNotice("Sales portal access removed.");
-    } catch (removeError) {
-      setError(removeError.message || "Sales access could not be removed.");
-    }
-  }
 
   async function submit(event) {
     event.preventDefault();
@@ -124,7 +79,6 @@ export default function SalesSettings({ userId }) {
 
   return (
     <section className="admin-settings-block" aria-labelledby="sales-settings-title">
-      <ConfirmDialog {...dialogProps} />
       <div className="admin-settings-heading">
         <div>
           <p className="admin-eyebrow">BUSINESS MANAGEMENT</p>
@@ -167,36 +121,6 @@ export default function SalesSettings({ userId }) {
           <button className="admin-primary-button" type="submit" disabled={saving}>{saving ? "Saving..." : "Apply sales settings"}</button>
         </div>
       </form>
-      <section className="sales-access-section" aria-labelledby="sales-access-title">
-        <h3 id="sales-access-title">Sales-only accounts</h3>
-        <p className="admin-muted">Admins already have access. Add a Supabase Auth user UUID here to allow that account into Sales without access to product management or site settings.</p>
-        <form className="sales-access-form" onSubmit={addSalesAccount}>
-          <label>
-            Supabase Auth user UUID
-            <input
-              type="text"
-              value={newSalesUserId}
-              onChange={(event) => setNewSalesUserId(event.target.value)}
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              autoComplete="off"
-              required
-            />
-          </label>
-          <AdminButton type="submit" disabled={savingSalesUser}>
-            {savingSalesUser ? "Granting access..." : "Grant Sales access"}
-          </AdminButton>
-        </form>
-        {salesUsers.length ? (
-          <ul className="sales-access-list">
-            {salesUsers.map((user) => (
-              <li key={user.user_id}>
-                <code>{user.user_id}</code>
-                <AdminButton variant="danger" onClick={() => revokeSalesAccount(user.user_id)}>Remove access</AdminButton>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="admin-muted">No Sales-only accounts have been added.</p>}
-      </section>
     </section>
   );
 }

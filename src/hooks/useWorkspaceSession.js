@@ -9,7 +9,7 @@ import {
 
 export default function useWorkspaceSession({ clearErrorOnAuthChange = true } = {}) {
   const [session, setSession] = useState(null);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(() => Boolean(supabase));
   const [error, setError] = useState("");
 
   const expireSession = useCallback(async (expiredSession) => {
@@ -29,7 +29,6 @@ export default function useWorkspaceSession({ clearErrorOnAuthChange = true } = 
 
   useEffect(() => {
     if (!supabase) {
-      setCheckingSession(false);
       return undefined;
     }
 

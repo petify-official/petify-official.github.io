@@ -35,27 +35,38 @@ const colorFields = [
 ];
 
 function PaletteColorField({ label, value, onChange }) {
-  const [hexDraft, setHexDraft] = useState(value);
-
-  useEffect(() => setHexDraft(value), [value]);
+  const [hexState, setHexState] = useState({ source: value, draft: value });
+  const hexDraft = hexState.source === value ? hexState.draft : value;
 
   function commitHex() {
-    if (/^#[0-9a-f]{6}$/i.test(hexDraft)) onChange(hexDraft);
-    else setHexDraft(value);
+    if (/^#[0-9a-f]{6}$/i.test(hexDraft)) {
+      onChange(hexDraft);
+      setHexState({ source: hexDraft, draft: hexDraft });
+    } else {
+      setHexState({ source: value, draft: value });
+    }
   }
 
   return (
     <label className="admin-palette-color-field">
       <span>{label}</span>
       <div>
-        <input type="color" value={value} aria-label={`${label} color`} onChange={(event) => onChange(event.target.value)} />
+        <input
+          type="color"
+          value={value}
+          aria-label={`${label} color`}
+          onChange={(event) => {
+            setHexState({ source: event.target.value, draft: event.target.value });
+            onChange(event.target.value);
+          }}
+        />
         <input
           type="text"
           inputMode="text"
           value={hexDraft}
           pattern="#[0-9A-Fa-f]{6}"
           aria-label={`${label} hex value`}
-          onChange={(event) => setHexDraft(event.target.value)}
+          onChange={(event) => setHexState({ source: value, draft: event.target.value })}
           onBlur={commitHex}
         />
       </div>
@@ -120,7 +131,7 @@ export default function AppearanceSettingsEditor({ adminBrand, onAdminBrandChang
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, []);
+  }, [onAdminBrandChange]);
 
   useEffect(() => {
     if (!loading) applyColorPalette(palette);

@@ -4,13 +4,15 @@ export default function useObjectUrl(file) {
   const [url, setUrl] = useState("");
 
   useEffect(() => {
-    if (!file) {
-      setUrl("");
-      return undefined;
-    }
-    const nextUrl = URL.createObjectURL(file);
-    setUrl(nextUrl);
-    return () => URL.revokeObjectURL(nextUrl);
+    let active = true;
+    const nextUrl = file ? URL.createObjectURL(file) : "";
+    queueMicrotask(() => {
+      if (active) setUrl(nextUrl);
+    });
+    return () => {
+      active = false;
+      if (nextUrl) URL.revokeObjectURL(nextUrl);
+    };
   }, [file]);
 
   return url;
