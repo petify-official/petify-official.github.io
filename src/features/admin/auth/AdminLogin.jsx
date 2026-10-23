@@ -12,6 +12,9 @@ export default function AdminLogin({
   title = "Admin sign in",
   description = "Sign in or request access to the workspace.",
   backHref = "/",
+  signUpMetadata,
+  requestDescription = "Create an account. An admin will review your request.",
+  requestSentMessage = REQUEST_SENT_MESSAGE,
 }) {
   const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
@@ -47,13 +50,16 @@ export default function AdminLogin({
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin,
+            ...(signUpMetadata ? { data: signUpMetadata } : {}),
+          },
         });
         if (signUpError) {
           setError(GENERIC_AUTH_ERROR);
           return;
         }
-        setNotice(REQUEST_SENT_MESSAGE);
+        setNotice(requestSentMessage);
         if (data.session) onSignedIn(data.session);
         return;
       }
@@ -112,7 +118,7 @@ export default function AdminLogin({
             <p>{isForgot
               ? "Enter your account email and we’ll send a secure reset link."
               : isRequest
-                ? "Create an account. An admin will review your request."
+                ? requestDescription
                 : description}</p>
           </div>
 

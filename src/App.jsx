@@ -22,6 +22,7 @@ import {
 
 const AdminDashboard = lazy(() => import("./AdminDashboard.jsx"));
 const SalesPortal = lazy(() => import("./features/sales/SalesPortal.jsx"));
+const StorekeepingPortal = lazy(() => import("./features/storekeeping/StorekeepingPortal.jsx"));
 const PasswordReset = lazy(() => import("./features/admin/auth/PasswordReset.jsx"));
 const CART_STORAGE_KEY = "petify-store-cart";
 const DEFAULT_DOCUMENT_TITLE = "Pëtify | Pure love, premium care";
@@ -70,6 +71,7 @@ export default function App() {
   const isAboutRoute = routeHash === "#about";
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
+  const isStorekeepingRoute = routePath === "/" && routeHash === "#/adams-store-keeping";
   const isPasswordResetRoute = new URLSearchParams(window.location.search).get("view") === "reset-password"
     || routeHash === "#reset-password"
     || new URLSearchParams(routeHash.slice(1)).get("type") === "recovery";
@@ -199,7 +201,7 @@ export default function App() {
   }, [cart, cartValidationAttempt, error, loading, products]);
 
   useEffect(() => {
-    if (!detailProductId || loading || error || isAdminRoute || isSalesPortalRoute || isAboutRoute) return undefined;
+    if (!detailProductId || loading || error || isAdminRoute || isSalesPortalRoute || isStorekeepingRoute || isAboutRoute) return undefined;
     if (products.some((product) => String(product.id) === detailProductId)) return undefined;
     let active = true;
     async function loadSharedProduct() {
@@ -220,7 +222,7 @@ export default function App() {
     }
     loadSharedProduct();
     return () => { active = false; };
-  }, [detailProductId, error, isAboutRoute, isAdminRoute, isSalesPortalRoute, loading, productFetchAttempt, products]);
+  }, [detailProductId, error, isAboutRoute, isAdminRoute, isSalesPortalRoute, isStorekeepingRoute, loading, productFetchAttempt, products]);
 
   useEffect(() => {
     const updateScrollPosition = () => setShowScrollTop(window.scrollY > 320);
@@ -241,8 +243,10 @@ export default function App() {
 
   useEffect(() => {
     const storeTitle = settings?.brandTitle?.trim() || DEFAULT_DOCUMENT_TITLE;
-    document.title = isAboutRoute ? `About us | ${storeTitle}` : storeTitle;
-  }, [isAboutRoute, settings?.brandTitle]);
+    document.title = isStorekeepingRoute
+      ? "Adam Farms Storekeeping"
+      : isAboutRoute ? `About us | ${storeTitle}` : storeTitle;
+  }, [isAboutRoute, isStorekeepingRoute, settings?.brandTitle]);
 
   useEffect(() => {
     if (!settings?.colorPalette) return;
@@ -379,6 +383,12 @@ export default function App() {
   if (isPasswordResetRoute) return (
     <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading password reset...</p></div>}>
       <PasswordReset />
+    </Suspense>
+  );
+
+  if (isStorekeepingRoute) return (
+    <Suspense fallback={<div className="storekeeping-gate" role="status">Loading Adam Farms Storekeeping…</div>}>
+      <StorekeepingPortal />
     </Suspense>
   );
 
