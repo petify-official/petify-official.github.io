@@ -44,7 +44,12 @@ export default function AdminDashboard({ adminBrand: initialAdminBrand, initialV
   if (!session) {
     return (
       <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading sign in...</p></div>}>
-        <AdminLogin adminBrand={adminBrand} onSignedIn={setSession} />
+        <AdminLogin
+          key={window.location.hash === "#admin-forgot-password" ? "forgot" : "signin"}
+          adminBrand={adminBrand}
+          onSignedIn={setSession}
+          initialMode={window.location.hash === "#admin-forgot-password" ? "forgot" : "signin"}
+        />
       </Suspense>
     );
   }

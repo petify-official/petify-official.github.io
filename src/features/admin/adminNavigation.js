@@ -1,17 +1,39 @@
-import { createSalesNavigationItem } from "./workspaceNavigation.js";
-
-const adminMenuOptions = [
-  { id: "products", label: "Products", icon: "products", view: "products" },
-  { id: "settings", label: "Site settings", icon: "settings", view: "site-settings" },
+export const SITE_SETTINGS_VIEWS = [
+  { id: "site-header", label: "Header", description: "Store name, tagline, visibility, and navigation.", section: "header" },
+  { id: "site-about", label: "About", description: "Your story, mission, vision, and introduction.", section: "about" },
+  { id: "site-footer", label: "Footer", description: "Contact details, footer text, and legal notes.", section: "footer" },
+  { id: "site-storefront", label: "Store sections", description: "Catalog visibility, features, and coming-soon content.", section: "storefront" },
+  { id: "site-brand-assets", label: "Brand assets", description: "Store logo and browser favicon.", section: "brand-assets" },
+  { id: "site-appearance", label: "Branding & loading", description: "Admin dashboard identity and loading screen.", section: "appearance" },
+  { id: "site-team", label: "Team & access", description: "Manage team access and workspace permissions.", section: "team" },
 ];
+
+const settingsViewIds = new Set(SITE_SETTINGS_VIEWS.map(({ id }) => id));
+
+export function isSiteSettingsView(view) {
+  return settingsViewIds.has(view) || view === "site-settings";
+}
+
+export function normalizeAdminView(view) {
+  if (view === "site-settings") return "site-settings";
+  return view === "products" || settingsViewIds.has(view) ? view : "products";
+}
 
 export function createAdminNavigationItems(activeView, onSelect) {
   return [
-    ...adminMenuOptions.map(({ view, ...item }) => ({
-      ...item,
-      active: activeView === view,
-      onClick: () => onSelect(view),
-    })),
-    createSalesNavigationItem(),
+    {
+      id: "products",
+      label: "Products",
+      icon: "products",
+      active: activeView === "products",
+      onClick: () => onSelect("products"),
+    },
+    {
+      id: "settings",
+      label: "Site settings",
+      icon: "settings",
+      active: isSiteSettingsView(activeView),
+      onClick: () => onSelect("site-settings"),
+    },
   ];
 }

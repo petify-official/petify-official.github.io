@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase.js";
+import { DEFAULT_ADMIN_BRAND, normalizeAdminBrand } from "../../../config/siteAppearance.js";
 import AdminButton from "../components/AdminButton.jsx";
 import AdminNotice from "../components/AdminNotice.jsx";
 
-export default function PasswordReset() {
+export default function PasswordReset({ adminBrand: initialAdminBrand }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const adminBrand = normalizeAdminBrand(initialAdminBrand ?? DEFAULT_ADMIN_BRAND);
 
   useEffect(() => {
     if (!supabase) return undefined;
@@ -61,18 +63,47 @@ export default function PasswordReset() {
   }
 
   return (
-    <form className="admin-login" onSubmit={submit}>
-      <p className="admin-eyebrow">Pëtify WORKSPACE</p>
-      <h1>Choose a new password</h1>
-      <p className="admin-muted">Enter and confirm your new password.</p>
-      <label>New password<input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
-      <label>Confirm new password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label>
-      {error && <AdminNotice kind="error">{error}</AdminNotice>}
-      {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
-      <AdminButton variant="primary" type="submit" disabled={!ready || busy || Boolean(error)}>
-        {busy ? "Updating..." : "Update password"}
-      </AdminButton>
-      <a className="admin-back-link" href="/#admin">Back to sign in</a>
-    </form>
+    <main className="admin-login-page">
+      <section className="admin-login-story" aria-label="Admin workspace">
+        <div className="admin-login-story-brand">
+          <img src="/images/logo.png" alt="" />
+          <span>{adminBrand.name}<small>{adminBrand.label} workspace</small></span>
+        </div>
+        <div className="admin-login-story-copy">
+          <p className="admin-login-story-kicker">ACCOUNT SECURITY</p>
+          <h2>Choose a new password.</h2>
+          <p>Set a new password to securely return to your store workspace.</p>
+        </div>
+        <p className="admin-login-story-note">A secure workspace for your store.</p>
+      </section>
+      <section className="admin-login-panel">
+        <form className="admin-login" aria-label="Choose a new password" onSubmit={submit}>
+          <div className="admin-login-brand">
+            <img src="/images/logo.png" alt="" />
+            <span>{adminBrand.name} <small>{adminBrand.label}</small></span>
+          </div>
+          <div className="admin-login-heading">
+            <h1>Choose a new password</h1>
+            <p>Enter and confirm your new password to finish resetting your account.</p>
+          </div>
+          <div className="admin-login-fields">
+            <label>
+              New password
+              <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            </label>
+            <label>
+              Confirm new password
+              <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required />
+            </label>
+          </div>
+          {error && <AdminNotice kind="error">{error}</AdminNotice>}
+          {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
+          <AdminButton className="admin-login-submit" variant="primary" type="submit" disabled={!ready || busy || Boolean(error)}>
+            {busy ? "Updating..." : "Update password"}
+          </AdminButton>
+          <a className="admin-login-store-link" href="/#admin">Back to sign in</a>
+        </form>
+      </section>
+    </main>
   );
 }

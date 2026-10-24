@@ -1,7 +1,7 @@
--- Apply after core-schema-01.sql through inventory-dashboard-06.sql, before product-seed-07.sql.
+-- Apply after 01-core-schema.sql through 06-inventory-dashboard.sql, before 08-product-seed.sql.
 -- This migration preserves current role rows and keeps admin-only actions protected.
--- Rollback: restore the prior Sales policies/functions from sales-04.sql, admin-sales-editing-05.sql,
--- and inventory-dashboard-06.sql. Export pending requests before dropping this migration's trigger,
+-- Rollback: restore the prior Sales policies/functions from 04-sales.sql, 05-admin-sales-editing.sql,
+-- and 06-inventory-dashboard.sql. Export pending requests before dropping this migration's trigger,
 -- functions, and access_requests table; preserve existing admin_users and sales_users rows.
 
 create or replace function public.has_sales_access()

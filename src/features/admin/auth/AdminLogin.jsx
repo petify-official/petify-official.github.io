@@ -6,14 +6,41 @@ import AdminButton from "../components/AdminButton.jsx";
 const REQUEST_SENT_MESSAGE = "Request sent. An admin must approve it before you can sign in to the workspace.";
 const GENERIC_AUTH_ERROR = "We could not complete that request. Check your details and try again.";
 
+function getSignUpErrorMessage(authError) {
+  const code = authError?.code?.toLowerCase() ?? "";
+  const message = authError?.message?.toLowerCase() ?? "";
+
+  if (code === "email_exists" || code === "user_already_exists" || message.includes("already registered")) {
+    return "An account may already use this email. Try signing in or use Forgot password to recover it.";
+  }
+  if (code === "weak_password" || message.includes("password") && message.includes("characters")) {
+    return "That password does not meet the security requirements. Choose a stronger password and try again.";
+  }
+  if (code.includes("rate_limit") || message.includes("rate limit") || message.includes("too many")) {
+    return "Too many account or email requests were made recently. Wait a few minutes, then try again.";
+  }
+  if (code.includes("redirect") || message.includes("redirect") || message.includes("redirect_to")) {
+    return "Supabase rejected the confirmation redirect. Add https://petifyshopping.github.io/** under Authentication → URL Configuration → Redirect URLs.";
+  }
+  if (code.includes("email") && (message.includes("invalid") || message.includes("not valid"))) {
+    return "Check the email address and try again.";
+  }
+  if (code.includes("provider") || message.includes("email signups are disabled")) {
+    return "Email account creation is disabled in Supabase. Enable the Email provider under Authentication → Sign In / Providers.";
+  }
+
+  return authError?.message || "Account creation failed. Check the Supabase Auth logs for the exact cause.";
+}
+
 export default function AdminLogin({
   adminBrand,
   onSignedIn,
   title = "Admin sign in",
   description = "Sign in or request access to the workspace.",
   backHref = "/",
+  initialMode = "signin",
 }) {
-  const [mode, setMode] = useState("signin");
+  const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -50,7 +77,7 @@ export default function AdminLogin({
           options: { emailRedirectTo: window.location.origin },
         });
         if (signUpError) {
-          setError(GENERIC_AUTH_ERROR);
+          setError(getSignUpErrorMessage(signUpError));
           return;
         }
         setNotice(REQUEST_SENT_MESSAGE);
@@ -66,8 +93,8 @@ export default function AdminLogin({
         return;
       }
       setNotice("If an account exists for that address, password reset instructions will be sent.");
-    } catch {
-      setError(GENERIC_AUTH_ERROR);
+    } catch (authFailure) {
+      setError(mode === "request" ? getSignUpErrorMessage(authFailure) : GENERIC_AUTH_ERROR);
     } finally {
       setBusy(false);
     }
@@ -78,8 +105,20 @@ export default function AdminLogin({
 
   return (
     <main className="admin-login-page">
+      <section className="admin-login-story" aria-label="Admin workspace">
+        <div className="admin-login-story-brand">
+          <img src="/images/logo.png" alt="" />
+          <span>{adminBrand.name}<small>{adminBrand.label} workspace</small></span>
+        </div>
+        <div className="admin-login-story-copy">
+          <p className="admin-login-story-kicker">ADMIN WORKSPACE</p>
+          <h2>A simpler way to care for your shop.</h2>
+          <p>Manage products, update your storefront, and keep your team access organized from one secure place.</p>
+        </div>
+        <p className="admin-login-story-note">A secure workspace for your store.</p>
+      </section>
       <section className="admin-login-panel">
-        <form className="admin-login" onSubmit={submit}>
+        <form className="admin-login" aria-label={isForgot ? "Reset password" : "Admin sign in"} onSubmit={submit}>
           <div className="admin-login-brand">
             <img src="/images/logo.png" alt="" />
             <span>{adminBrand.name} <small>{adminBrand.label}</small></span>
@@ -170,9 +209,7 @@ export default function AdminLogin({
           </div>
 
           {mode === "signin" && (
-            <button className="admin-login-forgot" type="button" onClick={() => { setMode("forgot"); setError(""); setNotice(""); }}>
-              {/* Forgot password? */}
-            </button>
+            <a className="admin-login-forgot" href="/#admin-forgot-password">Forgot password?</a>
           )}
           {error && <AdminNotice kind="error">{error}</AdminNotice>}
           {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
@@ -183,9 +220,9 @@ export default function AdminLogin({
           </AdminButton>
 
           {isForgot && (
-            <button className="admin-login-back" type="button" onClick={() => { setMode("signin"); setError(""); setNotice(""); }}>
+            <a className="admin-login-back" href="/#admin">
               Back to sign in
-            </button>
+            </a>
           )}
           <a className="admin-login-store-link" href={backHref}>← Back to storefront</a>
         </form>

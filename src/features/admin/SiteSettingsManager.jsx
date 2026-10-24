@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import StorefrontContentEditor from "./StorefrontContentEditor.jsx";
 import AppearanceSettingsEditor from "./AppearanceSettingsEditor.jsx";
-import SalesSettings from "../sales/SalesSettings.jsx";
 import {
   getStoreFavicon,
   getHeroPills,
@@ -23,7 +22,7 @@ import useObjectUrl from "../../hooks/useObjectUrl.js";
 
 const TeamAccessPanel = lazy(() => import("./TeamAccessPanel.jsx"));
 
-export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, userId, mainSections, sections, products }) {
+export default function SiteSettingsManager({ section, adminBrand, onAdminBrandChange, userId, mainSections, sections, products }) {
   const [storeLogo, setStoreLogo] = useState("");
   const [storeFavicon, setStoreFavicon] = useState("");
   const [heroPills, setHeroPills] = useState([]);
@@ -221,10 +220,11 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
     <div className="admin-site-settings">
       {error && <AdminNotice kind="error">{error}</AdminNotice>}
       {notice && <AdminNotice kind="success">{notice}</AdminNotice>}
-      <details className="admin-settings-group" open>
-        <summary>Branding and storefront</summary>
+      {["header", "about", "footer", "storefront"].includes(section) && (
+        <StorefrontContentEditor key={section} section={section} userId={userId} />
+      )}
+      {section === "brand-assets" && (
         <div className="admin-settings-group-content">
-          <StorefrontContentEditor userId={userId} />
       <section className="admin-settings-block" aria-labelledby="admin-logo-settings-title">
         <div className="admin-settings-heading"><div><p className="admin-eyebrow">BRAND ASSET</p><h2 id="admin-logo-settings-title">Store logo</h2></div></div>
         <form className="admin-store-logo" onSubmit={submitLogo}>
@@ -282,6 +282,9 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
           </div>
         </form>
       </section>
+          </div>
+      )}
+      {section === "header" && (
       <section className="admin-settings-block" aria-labelledby="admin-navigation-settings-title">
         <div className="admin-settings-heading">
           <div><p className="admin-eyebrow">STOREFRONT NAVIGATION</p><h2 id="admin-navigation-settings-title">Hero navigation</h2></div>
@@ -313,28 +316,15 @@ export default function SiteSettingsManager({ adminBrand, onAdminBrandChange, us
           </div>
         </form>
       </section>
-        </div>
-      </details>
-      <details className="admin-settings-group">
-        <summary>Colors and appearance</summary>
-        <div className="admin-settings-group-content">
-          <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={userId} />
-        </div>
-      </details>
-      <details className="admin-settings-group">
-        <summary>General and Sales</summary>
-        <div className="admin-settings-group-content">
-          <SalesSettings userId={userId} />
-        </div>
-      </details>
-      <details className="admin-settings-group">
-        <summary>Team &amp; Access</summary>
-        <div className="admin-settings-group-content">
-          <Suspense fallback={<AdminState kind="loading" description="Loading access controls..." />}>
-            <TeamAccessPanel />
-          </Suspense>
-        </div>
-      </details>
+      )}
+      {section === "appearance" && (
+        <AppearanceSettingsEditor adminBrand={adminBrand} onAdminBrandChange={onAdminBrandChange} userId={userId} />
+      )}
+      {section === "team" && (
+        <Suspense fallback={<AdminState kind="loading" description="Loading access controls..." />}>
+          <TeamAccessPanel />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -42,6 +42,12 @@ create index if not exists catalog_sections_main_order_idx
 alter table public.products
   add column if not exists section_id text;
 
+insert into public.catalog_sections (id, title, display_order)
+values
+  ('singles', 'Single Products', 0),
+  ('combos', 'Combo Offers', 1)
+on conflict (id) do nothing;
+
 update public.products
 set section_id = case when type = 'combo' then 'combos' else 'singles' end
 where section_id is null;

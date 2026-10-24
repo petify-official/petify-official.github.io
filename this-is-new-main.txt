@@ -1,6 +1,6 @@
 git add .
-git commit -m "updated ui/ux"
-git push origin phase-1
+git commit -m "sales removed and fixed admin panels"
+git push origin admin-edits
 
 npm run build
 npm run deploy

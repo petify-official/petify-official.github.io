@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WorkspaceSidebar from "./WorkspaceSidebar.jsx";
-import { createAdminNavigationItems } from "./adminNavigation.js";
+import { createAdminNavigationItems, isSiteSettingsView, normalizeAdminView, SITE_SETTINGS_VIEWS } from "./adminNavigation.js";
 import AccountMenu from "./AccountMenu.jsx";
 import { deleteWorkspaceDraft, getWorkspaceDrafts } from "../../services/workspaceDrafts.js";
 import useWorkspaceAccess from "../../hooks/useWorkspaceAccess.js";
@@ -61,14 +61,16 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
     const savedWorkspace = readAdminWorkspace(session.user.id);
     return {
       ...savedWorkspace,
-      activeView: initialView ?? (savedWorkspace.activeView === "site-settings" ? "site-settings" : "products"),
+      activeView: normalizeAdminView(initialView ?? savedWorkspace.activeView),
     };
   });
   const [persistenceIssue, setPersistenceIssue] = useState(null);
-  const activeView = initialView ?? (workspace.activeView === "site-settings" ? "site-settings" : "products");
+  const activeView = normalizeAdminView(initialView ?? workspace.activeView);
+  const isSettingsView = isSiteSettingsView(activeView);
+  const settingsSection = SITE_SETTINGS_VIEWS.find(({ id }) => id === activeView)?.section ?? "overview";
   const workspaceSnapshot = JSON.stringify({ ...workspace, activeView });
   const persistenceError = persistenceIssue?.snapshot === workspaceSnapshot ? persistenceIssue.message : "";
-  const [settingsVisited, setSettingsVisited] = useState(activeView === "site-settings");
+  const [settingsVisited, setSettingsVisited] = useState(isSettingsView);
   const editorDraft = workspace.editorDraft ?? null;
   const editorProduct = editorDraft?.product ?? null;
   const [addingSection, setAddingSection] = useState(false);
@@ -533,8 +535,9 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
   }
 
   function selectWorkspaceView(view) {
-    if (view === "site-settings") setSettingsVisited(true);
-    setWorkspace((current) => ({ ...current, activeView: view }));
+    const nextView = normalizeAdminView(view);
+    if (isSiteSettingsView(nextView)) setSettingsVisited(true);
+    setWorkspace((current) => ({ ...current, activeView: nextView }));
   }
 
   return (
@@ -542,7 +545,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
       <ConfirmDialog {...dialogProps} />
       <AdminTopbar
         brand={adminBrand}
-        pageTitle={editorProduct ? (editorProduct.id ? "Edit product" : "Add product") : activeView === "site-settings" ? "Site settings" : "Products"}
+        pageTitle={editorProduct ? (editorProduct.id ? "Edit product" : "Add product") : SITE_SETTINGS_VIEWS.find(({ id }) => id === activeView)?.label ?? (isSettingsView ? "Site settings" : "Products")}
       >
         <AccountMenu email={session.user.email} onSignOut={signOut} />
       </AdminTopbar>
@@ -556,19 +559,42 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
               <AdminButton disabled={finalizingDelete} onClick={undoProductDelete}>{finalizingDelete ? "Deleting..." : "Undo"}</AdminButton>
             </AdminNotice>
           )}
-          <div hidden={activeView !== "site-settings"}>
-            {(settingsVisited || activeView === "site-settings") && (
+          <div hidden={!isSettingsView}>
+            {(settingsVisited || isSettingsView) && (
               <>
-                <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Manage your brand, content, and what appears on the storefront.</p></div></div>
+                <div className="admin-page-heading"><div><p className="admin-eyebrow">SITE CONFIGURATION</p><h1>Site settings</h1><p className="admin-muted">Choose an area below to manage your storefront and brand.</p></div></div>
+                <section className="admin-settings-section-picker" aria-labelledby="admin-settings-section-picker-title">
+                  <div className="admin-settings-section-picker-heading">
+                    <h2 id="admin-settings-section-picker-title">Choose an area to configure</h2>
+                    <p>Select a section to view and edit its settings.</p>
+                  </div>
+                  <div className="admin-settings-section-grid">
+                    {SITE_SETTINGS_VIEWS.map(({ id, label, description }) => (
+                      <button
+                        key={id}
+                        className={`admin-settings-section-card${activeView === id ? " active" : ""}`}
+                        type="button"
+                        aria-current={activeView === id ? "page" : undefined}
+                        onClick={() => selectWorkspaceView(id)}
+                      >
+                        <span>{label}</span>
+                        <small>{description}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
                 <Suspense fallback={<p className="admin-muted">Loading site settings...</p>}>
-                  <SiteSettingsManager
-                    adminBrand={adminBrand}
-                    onAdminBrandChange={onAdminBrandChange}
-                    userId={session.user.id}
-                    mainSections={mainSections}
-                    sections={sections}
-                    products={products}
-                  />
+                  {settingsSection !== "overview" && (
+                    <SiteSettingsManager
+                      section={settingsSection}
+                      adminBrand={adminBrand}
+                      onAdminBrandChange={onAdminBrandChange}
+                      userId={session.user.id}
+                      mainSections={mainSections}
+                      sections={sections}
+                      products={products}
+                    />
+                  )}
                 </Suspense>
               </>
             )}
@@ -934,8 +960,7 @@ export default function ProductManager({ session, adminBrand, onAdminBrandChange
       </FilterSheet>
       <AdminBottomNav items={[
         { id: "products", label: "Products", icon: "▦", active: activeView === "products", onClick: () => selectWorkspaceView("products") },
-        { id: "dashboard", label: "Dashboard", icon: "◷", href: "/#petify-dashboard" },
-        { id: "settings", label: "Settings", icon: "⚙", active: activeView === "site-settings", onClick: () => selectWorkspaceView("site-settings") },
+        { id: "settings", label: "Settings", icon: "⚙", active: isSettingsView, onClick: () => selectWorkspaceView("site-settings") },
       ]} />
     </div>
   );

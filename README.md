@@ -12,16 +12,16 @@ Petify's product catalog is a React + Vite web app. Products, sections, and all 
 
 1. Create a Supabase project.
 2. Run the numbered SQL modules in `supabase/` in order:
-   1. `core-schema-01.sql` creates the base product table and public catalog policy.
-   2. `admin-access-02.sql` creates admin access, product write policies, and the public image bucket.
-   3. `catalog-sections-03.sql` adds configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, the editable About page, storefront visibility, and the editable footer version number. Subsections can be assigned to a main section or left standalone.
-   4. `sales-04.sql` enables the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. It depends on the admin and catalog modules.
-   5. `admin-sales-editing-05.sql` applies the Sales editing permissions and manual-sale functions. It depends on the Sales module.
-   6. `inventory-dashboard-06.sql` adds admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales.
-   7. `admin-access-07.sql` unifies Sales authorization, creates the access-request workflow, and adds admin approval/revocation RPCs. Apply it after `inventory-dashboard-06.sql`.
-   8. `product-seed-07.sql` inserts or updates the current product details. Seeded products start without photos; upload their photos from the admin page.
+   1. `01-core-schema.sql` creates the base product table and public catalog policy.
+   2. `02-admin-access.sql` creates admin access, product write policies, and the public image bucket.
+   3. `03-catalog-sections.sql` adds configurable main sections and subsections, section management permissions, and public store settings for brand, contact information, content, logo, hero navigation, the editable About page, storefront visibility, and the editable footer version number. It creates the default `singles` and `combos` sections before assigning products. Subsections can be assigned to a main section or left standalone.
+   4. `04-sales.sql` enables the cloud-backed Sales ledger, Sales-only user access, customer and payment history, sales settings, and secure workspace drafts. It depends on the admin and catalog modules.
+   5. `05-admin-sales-editing.sql` applies the Sales editing permissions and manual-sale functions. It depends on the Sales module.
+   6. `06-inventory-dashboard.sql` adds admin-managed stock, atomic stock deductions/restocks, and aggregated Sales dashboard metrics. Existing products start with stock set to `0`; set accurate quantities in the admin UI before recording sales.
+   7. `07-admin-access-requests.sql` unifies Sales authorization, creates the access-request workflow, and adds admin approval/revocation RPCs. Apply it after `06-inventory-dashboard.sql`.
+   8. `08-product-seed.sql` inserts or updates the current product details. Seeded products start without photos; upload their photos from the admin page.
 
-   `admin-access-07.sql` intentionally shares the `07` suffix with the existing seed file; apply the access migration before seeding products. These scripts create or update schema and preserve existing `admin_users` and `sales_users` rows. Rerun schema modules in dependency order when applying updates.
+   Run each complete file in the Supabase SQL Editor, top to bottom. The schema modules are safe to rerun in this dependency order and preserve existing `admin_users` and `sales_users` rows.
 3. In Supabase Authentication, enable email/password sign-in and email confirmation. Enable sign-ups so staff can request accounts; unapproved accounts cannot access the workspace, and RLS remains the security boundary.
 4. Create the first admin once, using the account's email, in the Supabase SQL Editor. This is a privileged bootstrap operation and must not be exposed as a client RPC:
 

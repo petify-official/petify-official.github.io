@@ -66,7 +66,10 @@ export default function App() {
   } = useStorefrontCatalog();
   const [routeHash, setRouteHash] = useState(window.location.hash);
   const [routePath, setRoutePath] = useState(window.location.pathname.replace(/\/+$/, "") || "/");
-  const isAdminRoute = routeHash === "#admin" || routeHash === "#admin-settings" || routeHash === "#admin-products";
+  const isAdminRoute = routeHash === "#admin"
+    || routeHash === "#admin-settings"
+    || routeHash === "#admin-products"
+    || routeHash === "#admin-forgot-password";
   const isAboutRoute = routeHash === "#about";
   const isSalesPortalRoute = routePath === "/petify-dashboard"
     || (routePath === "/" && (routeHash === "#sales-dashb" || routeHash.startsWith("#petify-dashboard")));
@@ -264,11 +267,10 @@ export default function App() {
     const element = document.getElementById(target.slice(1));
     if (!element) return;
 
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      window.scrollTo(0, window.scrollY + element.getBoundingClientRect().top);
-    } else {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    const headerHeight = document.getElementById("site-header")?.getBoundingClientRect().height ?? 0;
+    const targetTop = window.scrollY + element.getBoundingClientRect().top - headerHeight - 16;
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    window.scrollTo({ top: Math.max(0, targetTop), behavior });
   }
 
   function scrollToHeroTarget(event, target) {
@@ -378,7 +380,7 @@ export default function App() {
 
   if (isPasswordResetRoute) return (
     <Suspense fallback={<div className="admin-gate"><p className="admin-muted">Loading password reset...</p></div>}>
-      <PasswordReset />
+      <PasswordReset adminBrand={settings?.adminBrand} />
     </Suspense>
   );
 

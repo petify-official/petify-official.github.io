@@ -78,14 +78,13 @@ export async function getStoreFavicon() {
 export async function getAppearanceSettings() {
   const { data, error } = await supabase
     .from("site_settings")
-    .select("color_palette, loading_screen, admin_brand")
+    .select("loading_screen, admin_brand")
     .eq("id", "storefront")
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Storefront settings are missing from Supabase.");
 
   return {
-    colorPalette: data.color_palette ?? null,
     loadingScreen: data.loading_screen ?? null,
     adminBrand: data.admin_brand ?? null,
   };
@@ -95,14 +94,6 @@ export async function saveAdminBrand(adminBrand) {
   const { error } = await supabase
     .from("site_settings")
     .update({ admin_brand: adminBrand, updated_at: new Date().toISOString() })
-    .eq("id", "storefront");
-  if (error) throw error;
-}
-
-export async function saveColorPalette(colorPalette) {
-  const { error } = await supabase
-    .from("site_settings")
-    .update({ color_palette: colorPalette, updated_at: new Date().toISOString() })
     .eq("id", "storefront");
   if (error) throw error;
 }
@@ -349,7 +340,7 @@ export async function uploadProductImages(productId, files, onProgress, options 
       upsert: false,
     });
     if (error?.message === "Bucket not found") {
-      throw new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/admin-access-02.sql in the Supabase SQL Editor, then try again.`);
+      throw new Error(`The Supabase Storage bucket "${imageBucket}" is missing. Run supabase/02-admin-access.sql in the Supabase SQL Editor, then try again.`);
     }
     if (error) throw error;
 

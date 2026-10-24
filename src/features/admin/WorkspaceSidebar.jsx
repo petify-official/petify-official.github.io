@@ -6,6 +6,10 @@ const iconPaths = {
   sales: ["M4 19V5", "M4 19h17", "m7 15 4-4 3 3 6-7", "M17 7h3v3"],
   settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z", "M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 3.1-.2-.1a1.7 1.7 0 0 0-1.8.3l-.1.1h-3.6l-.1-.2a1.7 1.7 0 0 0-1.5-1.1 1.7 1.7 0 0 0-1.3.8l-.1.2-3.1-1.8.1-.2a1.7 1.7 0 0 0-.3-1.8l-.1-.1v-3.6l.2-.1a1.7 1.7 0 0 0 1.1-1.5 1.7 1.7 0 0 0-.8-1.3l-.2-.1 1.8-3.1.2.1a1.7 1.7 0 0 0 1.8-.3l.1-.1h3.6l.1.2a1.7 1.7 0 0 0 1.5 1.1 1.7 1.7 0 0 0 1.3-.8l.1-.2 3.1 1.8-.1.2a1.7 1.7 0 0 0 .3 1.8l.1.1v3.6l-.2.1a1.7 1.7 0 0 0-1.1 1.5Z"],
   storefront: ["M3 10h18", "m5 10 1 11h12l1-11", "M4 10l2-7h12l2 7", "M9 21v-6h6v6"],
+  about: ["M4 5h16", "M4 10h16", "M4 15h10", "M4 20h10", "M18 15v5", "m16 18 2 2 2-2"],
+  footer: ["M4 5h16", "M4 10h16", "M4 15h16", "M4 20h16"],
+  brand: ["M12 3 4 7v10l8 4 8-4V7l-8-4Z", "m4 7 8 4 8-4", "M12 11v10"],
+  team: ["M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2", "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M20 21v-2a4 4 0 0 0-3-3.87", "M16 3.13a4 4 0 0 1 0 7.75"],
   overview: ["M3 3h8v8H3z", "M13 3h8v5h-8z", "M13 10h8v11h-8z", "M3 13h8v8H3z"],
   create: ["M12 5v14", "M5 12h14"],
   history: ["M3 12a9 9 0 1 0 2.6-6.4L3 8", "M3 3v5h5", "M12 7v5l3 2"],
@@ -23,9 +27,20 @@ function SidebarIcon({ name }) {
 
 export default function WorkspaceSidebar({ heading = "WORKSPACE", items }) {
   const [collapsed, setCollapsed] = useState(true);
-  const [expandedGroups, setExpandedGroups] = useState(() => new Set(
-    items.filter((item) => item.children?.length && (item.active || item.expanded)).map((item) => item.id),
-  ));
+  const activeGroupIds = items.filter((item) => item.children?.length && item.active).map((item) => item.id);
+  const activeGroupKey = activeGroupIds.join(",");
+  const [groupState, setGroupState] = useState(() => ({
+    activeKey: activeGroupKey,
+    expanded: new Set(items
+      .filter((item) => item.children?.length && (item.active || item.expanded))
+      .map((item) => item.id)),
+  }));
+  if (groupState.activeKey !== activeGroupKey) {
+    const expanded = new Set(groupState.expanded);
+    activeGroupIds.forEach((id) => expanded.add(id));
+    setGroupState({ activeKey: activeGroupKey, expanded });
+  }
+  const expandedGroups = groupState.expanded;
 
   return (
     <aside className={`workspace-nav${collapsed ? " is-collapsed" : ""}`}>
@@ -61,7 +76,15 @@ export default function WorkspaceSidebar({ heading = "WORKSPACE", items }) {
                   {item.href ? (
                     <a {...commonProps} href={item.href}>{parentContent}</a>
                   ) : (
-                    <button {...commonProps} type="button" onClick={item.onClick}>{parentContent}</button>
+                    <button {...commonProps} type="button" onClick={() => {
+                      item.onClick?.();
+                      setCollapsed(false);
+                      setGroupState((current) => {
+                        const expanded = new Set(current.expanded);
+                        expanded.add(item.id);
+                        return { ...current, expanded };
+                      });
+                    }}>{parentContent}</button>
                   )}
                   {!collapsed && (
                     <button
@@ -69,11 +92,11 @@ export default function WorkspaceSidebar({ heading = "WORKSPACE", items }) {
                       type="button"
                       aria-label={`${expanded ? "Collapse" : "Expand"} ${item.label} submenu`}
                       aria-expanded={expanded}
-                      onClick={() => setExpandedGroups((current) => {
-                        const next = new Set(current);
-                        if (next.has(item.id)) next.delete(item.id);
-                        else next.add(item.id);
-                        return next;
+                      onClick={() => setGroupState((current) => {
+                        const expanded = new Set(current.expanded);
+                        if (expanded.has(item.id)) expanded.delete(item.id);
+                        else expanded.add(item.id);
+                        return { ...current, expanded };
                       })}
                     >
                       <span className={`workspace-nav-chevron${expanded ? " expanded" : ""}`} aria-hidden="true">›</span>
@@ -84,10 +107,11 @@ export default function WorkspaceSidebar({ heading = "WORKSPACE", items }) {
                   <div className="workspace-nav-children">
                     {item.children.map((child) => {
                       const childContent = <><SidebarIcon name={child.icon} /><span className="workspace-nav-label">{child.label}</span></>;
+                      const childClassName = `workspace-nav-child${child.active ? " active" : ""}`;
                       if (child.href) {
-                        return <a key={child.id} className="workspace-nav-child" href={child.href} title={child.label} aria-current={child.active ? "page" : undefined}>{childContent}</a>;
+                        return <a key={child.id} className={childClassName} href={child.href} title={child.label} aria-current={child.active ? "page" : undefined}>{childContent}</a>;
                       }
-                      return <button key={child.id} className="workspace-nav-child" type="button" onClick={child.onClick}>{childContent}</button>;
+                      return <button key={child.id} className={childClassName} type="button" onClick={child.onClick} aria-current={child.active ? "page" : undefined}>{childContent}</button>;
                     })}
                   </div>
                 )}
