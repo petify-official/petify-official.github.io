@@ -5,7 +5,6 @@ import CatalogSections from "./features/storefront/components/CatalogSections.js
 import FeatureList from "./features/storefront/components/FeatureList.jsx";
 import ScrollToTop from "./features/storefront/components/ScrollToTop.jsx";
 import StoreCart from "./features/storefront/components/StoreCart.jsx";
-import StoreCartButton from "./features/storefront/components/StoreCartButton.jsx";
 import StoreFooter from "./features/storefront/components/StoreFooter.jsx";
 import StoreHeader from "./features/storefront/components/StoreHeader.jsx";
 import ProductDetailsDialog from "./features/storefront/components/ProductDetailsDialog.jsx";
@@ -84,7 +83,6 @@ export default function App() {
   const [cartValidationAttempt, setCartValidationAttempt] = useState(0);
   const [validatedProductIds, setValidatedProductIds] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isStoreMenuOpen, setIsStoreMenuOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [detailProductId, setDetailProductId] = useState(() => new URLSearchParams(window.location.search).get("product"));
@@ -226,9 +224,29 @@ export default function App() {
   }, [detailProductId, error, isAboutRoute, isAdminRoute, isSalesPortalRoute, loading, productFetchAttempt, products]);
 
   useEffect(() => {
-    const updateScrollPosition = () => setShowScrollTop(window.scrollY > 320);
+    let previousY = window.scrollY;
+    let animationFrame = 0;
+
+    function updateScrollPosition() {
+      if (animationFrame) return;
+      animationFrame = window.requestAnimationFrame(() => {
+        const currentY = window.scrollY;
+        const movement = currentY - previousY;
+        if (currentY <= 320 || movement < -5) {
+          setShowScrollTop(false);
+        } else if (movement > 5) {
+          setShowScrollTop(true);
+        }
+        previousY = currentY;
+        animationFrame = 0;
+      });
+    }
+
     window.addEventListener("scroll", updateScrollPosition, { passive: true });
-    return () => window.removeEventListener("scroll", updateScrollPosition);
+    return () => {
+      window.removeEventListener("scroll", updateScrollPosition);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
   }, []);
 
   useEffect(() => {
@@ -369,8 +387,6 @@ export default function App() {
     !currentProductIds.has(String(item.productId))
     && !validatedProductIds.includes(String(item.productId))
   ));
-  const showFloatingCart = !loading && !error && settings && !isAboutRoute
-    && showScrollTop && cartItemCount > 0 && !isStoreMenuOpen && !isCartOpen;
   const detailProduct = products.find((product) => String(product.id) === detailProductId)
     ?? (String(sharedProduct?.id) === detailProductId ? sharedProduct : null);
   const detailProductError = productFetchError?.id === detailProductId
@@ -420,7 +436,6 @@ export default function App() {
           onPillClick={scrollToHeroTarget}
           cartItemCount={cartItemCount}
           onCartClick={openCart}
-          onMenuOpenChange={setIsStoreMenuOpen}
           isAboutRoute={isAboutRoute}
           searchValue={searchInput}
           onSearchChange={setSearchInput}
@@ -478,9 +493,6 @@ export default function App() {
       {!loading && !error && settings && (settings.visibility.footer ?? true) && (
         <StoreFooter footerTitle={settings.footerTitle} footerCopyright={settings.footerCopyright} footerDisclaimer={settings.footerDisclaimer} footerVersion={settings.footerVersion} contact={settings.contact} visibility={settings.visibility} />
       )}
-      {showFloatingCart && (
-        <StoreCartButton className="store-cart-floating" itemCount={cartItemCount} onClick={openCart} />
-      )}
       {!loading && !error && settings && isCartOpen && (
         <StoreCart
           items={cart}
@@ -504,7 +516,7 @@ export default function App() {
           initialVariantId={detailVariantId}
         />
       )}
-      {showScrollTop && <ScrollToTop onClick={scrollToTop} hasFloatingCart={showFloatingCart} />}
+      {showScrollTop && <ScrollToTop onClick={scrollToTop} />}
     </>
   );
 }

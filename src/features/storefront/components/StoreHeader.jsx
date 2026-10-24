@@ -11,7 +11,6 @@ export default function StoreHeader({
   onPillClick,
   cartItemCount,
   onCartClick,
-  onMenuOpenChange,
   isAboutRoute,
   searchValue,
   onSearchChange,
@@ -21,8 +20,6 @@ export default function StoreHeader({
   const showPills = visibility.hero_pills ?? true;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
-
-  useEffect(() => onMenuOpenChange?.(menuOpen), [menuOpen, onMenuOpenChange]);
 
   useEffect(() => {
     if (!menuOpen) return undefined;

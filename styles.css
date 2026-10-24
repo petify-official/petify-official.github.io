@@ -402,41 +402,9 @@ header {
   margin-left: auto;
 }
 
-.store-cart-floating {
-  position: fixed;
-  z-index: 20;
-  bottom: max(1.25rem, env(safe-area-inset-bottom));
-  left: 1.25rem;
-  display: inline-flex;
-  min-width: 54px;
-  min-height: 54px;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
-  color: white;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.28);
-  font: inherit;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.store-cart-floating:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.34);
-}
-
-.store-cart-floating .store-cart-button-label {
-  display: none;
-}
-
 .store-menu-trigger:focus-visible,
 .store-menu-panel a:focus-visible,
-.store-menu-cart:focus-visible,
-.store-cart-floating:focus-visible {
+.store-menu-cart:focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
 }
@@ -448,7 +416,6 @@ header {
 
 .store-menu-trigger svg,
 .store-menu-cart svg,
-.store-cart-floating svg,
 .btn-add-to-cart svg,
 .btn-direct-order svg,
 .store-cart-close svg,
@@ -1437,7 +1404,6 @@ html {
 .btn-direct-order:focus-visible,
 
 .store-cart-remove-all:focus-visible,
-.store-cart-floating:focus-visible,
 .store-cart-close:focus-visible,
 .store-cart-quantity button:focus-visible,
 .store-cart-item-total button:focus-visible,
@@ -1958,7 +1924,6 @@ body:has(#site-header) #site-footer .footer-legal {
   .btn,
   .feature-item,
   .product-variant-price,
-  .store-cart-floating,
   .store-menu-trigger,
   .store-menu-icon span,
   .store-cart-backdrop,
@@ -1977,7 +1942,6 @@ body:has(#site-header) #site-footer .footer-legal {
   .card:focus-within .card-main-image.active,
   .btn:hover,
   .btn:active,
-  .store-cart-floating:hover,
   .store-menu-trigger:hover,
   .store-menu-trigger[aria-expanded="true"],
   .store-cart-close:hover,
@@ -4114,19 +4078,9 @@ td.admin-state-empty {
     grid-column: 1;
   }
 
-  .store-cart-floating {
-    right: 1rem;
-    bottom: max(1rem, env(safe-area-inset-bottom));
-    left: auto;
-  }
-
   .back-to-top {
     right: 1rem;
     bottom: max(1rem, env(safe-area-inset-bottom));
-  }
-
-  .back-to-top.has-floating-cart {
-    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 54px + 0.5rem);
   }
 
   .store-cart-item {
@@ -5156,24 +5110,6 @@ body:has(#site-header) {
   font-size: 0.86rem;
 }
 
-.store-cart-floating {
-  z-index: 45;
-  right: 1rem;
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  left: auto;
-  background: var(--primary);
-}
-
-.store-cart-floating:hover {
-  background: var(--primary-dark);
-}
-
-.back-to-top.has-floating-cart {
-  z-index: 46;
-  right: 1rem;
-  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 54px + 0.65rem);
-}
-
 .store-cart-drawer {
   width: min(100%, 520px);
   height: 100dvh;
@@ -5552,7 +5488,6 @@ body:has(#site-header) {
   min-height: 44px;
 }
 
-.store-cart-floating,
 .store-cart-checkout,
 .product-details-dialog,
 .product-details-overlay {
@@ -5710,7 +5645,6 @@ body:has(#site-header) {
 
   #site-header *,
   .card,
-  .store-cart-floating,
   .store-cart-drawer,
   .product-details-dialog,
   .product-details-dialog * {
